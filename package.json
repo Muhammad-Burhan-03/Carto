@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Carto - Full-stack e-commerce marketplace (Netlify Functions + Neon PostgreSQL + Drizzle ORM)",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "netlify dev",
     "db:generate": "drizzle-kit generate",
