@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Carto - Online Marketplace</title>
+<link rel="icon" type="image/png" href="carto_favicon_64.png">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- ===================== TOAST ===================== -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- ===================== NAVBAR ===================== -->
+<nav class="navbar" id="mainNavbar">
+  <div class="nav-container">
+    <div class="nav-left">
+      <button class="hamburger" id="hamburgerBtn">☰</button>
+      <a href="#" class="logo" onclick="navigateTo('home')">
+        <img src="carto_logo_primary.png" alt="logo" style="width: 200px;">
+      </a>
+    </div>
+
+    <div class="nav-search">
+      <select id="categoryFilterNav" class="nav-search-select">
+        <option value="all">All Categories</option>
+        <option value="Electronics">Electronics</option>
+        <option value="Fashion">Fashion</option>
+        <option value="Home">Home & Living</option>
+        <option value="Beauty">Beauty</option>
+        <option value="Sports">Sports</option>
+        <option value="Books">Books</option>
+        <option value="Toys">Toys</option>
+      </select>
+      <input type="text" id="navSearchInput" placeholder="Search products, brands and more...">
+      <button class="nav-search-btn" onclick="performSearch()">🔍</button>
+    </div>
+
+    <div class="nav-right">
+      <a href="#" class="nav-link" onclick="navigateTo('home')">Home</a>
+      <a href="#" class="nav-link" onclick="navigateTo('products')">Shop</a>
+      <div class="nav-link nav-account" id="navAccountBtn">
+        <span id="navAccountLabel">👤 Login</span>
+        <div class="account-dropdown" id="accountDropdown">
+          <!-- populated by JS -->
+        </div>
+      </div>
+      <a href="#" class="nav-link nav-cart" onclick="navigateTo('cart')">
+        🛒 Cart <span class="cart-badge" id="cartBadge">0</span>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- ===================== MAIN APP CONTAINER ===================== -->
+<main id="app">
+
+  <!-- ============ HOME PAGE ============ -->
+  <section id="view-home" class="view">
+    <div class="hero">
+      <div class="hero-content">
+        <h1>Everything You Need, <span class="text-accent">Delivered Fast</span></h1>
+        <p>Discover millions of products from trusted sellers across every category</p>
+        <button class="btn btn-primary btn-lg" onclick="navigateTo('products')">Start Shopping →</button>
+      </div>
+      <div class="hero-decor"></div>
+    </div>
+
+    <div class="category-strip container">
+      <h2 class="section-title">Shop by Category</h2>
+      <div class="category-grid" id="categoryGrid"></div>
+    </div>
+
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Featured Products</h2>
+        <a href="#" onclick="navigateTo('products')" class="link-more">View All →</a>
+      </div>
+      <div class="product-grid" id="featuredProducts"></div>
+    </div>
+
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">Trending Now 🔥</h2>
+      </div>
+      <div class="product-grid" id="trendingProducts"></div>
+    </div>
+
+    <div class="seller-cta container">
+      <div class="seller-cta-box">
+        <div>
+          <h2>Become a Seller on Carto</h2>
+          <p>Reach millions of customers. Start your store today.</p>
+        </div>
+        <button class="btn btn-dark" onclick="navigateTo('adminLogin')">Start Selling →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LOGIN PAGE (User) ============ -->
+  <section id="view-userLogin" class="view auth-view">
+    <div class="auth-card">
+      <div class="auth-side">
+        <h2>Welcome Back 👋</h2>
+        <p>Login to track orders, manage your cart, and enjoy a personalized shopping experience.</p>
+      </div>
+      <div class="auth-form-box">
+        <h3>User Login</h3>
+        <form id="userLoginForm" onsubmit="return handleUserLogin(event)">
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="userLoginEmail" required placeholder="you@example.com">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="userLoginPassword" required placeholder="••••••••">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Login</button>
+          <p class="auth-switch">Don't have an account? <a href="#" onclick="navigateTo('userRegister')">Register</a></p>
+          <p class="auth-switch">Are you a seller? <a href="#" onclick="navigateTo('adminLogin')">Admin Login</a></p>
+          <p class="demo-hint">Demo: user@demo.com / 123456</p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REGISTER PAGE (User) ============ -->
+  <section id="view-userRegister" class="view auth-view">
+    <div class="auth-card">
+      <div class="auth-side">
+        <h2>Join Carto 🚀</h2>
+        <p>Create your free account and start shopping from thousands of trusted sellers.</p>
+      </div>
+      <div class="auth-form-box">
+        <h3>Create Account</h3>
+        <form id="userRegisterForm" onsubmit="return handleUserRegister(event)">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="regName" required placeholder="John Doe">
+          </div>
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="regEmail" required placeholder="you@example.com">
+          </div>
+          <div class="form-group">
+            <label>Phone Number</label>
+            <input type="tel" id="regPhone" required placeholder="+92 300 1234567">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="regPassword" required placeholder="••••••••" minlength="4">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">Create Account</button>
+          <p class="auth-switch">Already have an account? <a href="#" onclick="navigateTo('userLogin')">Login</a></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN LOGIN ============ -->
+  <section id="view-adminLogin" class="view auth-view">
+    <div class="auth-card auth-card-dark">
+      <div class="auth-side auth-side-dark">
+        <h2>Seller Center 🏪</h2>
+        <p>Manage your store, products, and orders all in one powerful dashboard.</p>
+      </div>
+      <div class="auth-form-box">
+        <h3>Admin / Seller Login</h3>
+        <form id="adminLoginForm" onsubmit="return handleAdminLogin(event)">
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="adminLoginEmail" required placeholder="seller@example.com">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="adminLoginPassword" required placeholder="••••••••">
+          </div>
+          <button type="submit" class="btn btn-dark btn-full">Login</button>
+          <p class="auth-switch">New seller? <a href="#" onclick="navigateTo('adminRegister')">Register your store</a></p>
+          <p class="auth-switch">Are you a customer? <a href="#" onclick="navigateTo('userLogin')">User Login</a></p>
+          <p class="demo-hint">Demo: admin@demo.com / 123456</p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN REGISTER ============ -->
+  <section id="view-adminRegister" class="view auth-view">
+    <div class="auth-card auth-card-dark">
+      <div class="auth-side auth-side-dark">
+        <h2>Start Selling Today 📈</h2>
+        <p>Register as a seller, choose a package, and launch your store in minutes.</p>
+      </div>
+      <div class="auth-form-box">
+        <h3>Seller Registration</h3>
+        <form id="adminRegisterForm" onsubmit="return handleAdminRegister(event)">
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="adminRegName" required placeholder="Jane Smith">
+          </div>
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="adminRegEmail" required placeholder="seller@example.com">
+          </div>
+          <div class="form-group">
+            <label>Phone Number</label>
+            <input type="tel" id="adminRegPhone" required placeholder="+92 300 1234567">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="adminRegPassword" required placeholder="••••••••" minlength="4">
+          </div>
+          <button type="submit" class="btn btn-dark btn-full">Register</button>
+          <p class="auth-switch">Already registered? <a href="#" onclick="navigateTo('adminLogin')">Login</a></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PACKAGE PURCHASE PAGE ============ -->
+  <section id="view-packages" class="view">
+    <div class="container">
+      <div class="page-heading">
+        <h1>Choose Your Seller Package</h1>
+        <p>Activate your seller account by selecting a package below</p>
+      </div>
+      <div class="package-grid" id="packageGrid"></div>
+    </div>
+  </section>
+
+  <!-- ============ ADMIN DASHBOARD ============ -->
+  <section id="view-adminDashboard" class="view dash-view">
+    <div class="dash-layout">
+      <aside class="sidebar" id="adminSidebar">
+        <div class="sidebar-profile">
+          <div class="avatar" id="adminAvatar">A</div>
+          <div>
+            <div class="sidebar-name" id="adminSidebarName">Admin</div>
+            <div class="sidebar-role">Seller Account</div>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a href="#" class="sidebar-link active" data-tab="overview" onclick="switchAdminTab('overview')">📊 Overview</a>
+          <a href="#" class="sidebar-link" data-tab="store" onclick="switchAdminTab('store')">🏪 My Store</a>
+          <a href="#" class="sidebar-link" data-tab="products" onclick="switchAdminTab('products')">📦 Products</a>
+          <a href="#" class="sidebar-link" data-tab="orders" onclick="switchAdminTab('orders')">🧾 Orders</a>
+          <a href="#" class="sidebar-link" data-tab="analytics" onclick="switchAdminTab('analytics')">📈 Analytics</a>
+          <a href="#" class="sidebar-link" data-tab="profile" onclick="switchAdminTab('profile')">👤 Profile</a>
+          <a href="#" class="sidebar-link sidebar-logout" onclick="logout()">🚪 Logout</a>
+        </nav>
+      </aside>
+
+      <div class="dash-content">
+        <!-- OVERVIEW TAB -->
+        <div class="dash-tab active" id="admin-tab-overview">
+          <div class="dash-header">
+            <h1>Dashboard Overview</h1>
+            <span class="badge-pkg" id="adminPkgBadge">Basic Plan</span>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card stat-blue">
+              <div class="stat-icon">💰</div>
+              <div><div class="stat-value" id="statRevenue">$0</div><div class="stat-label">Total Revenue</div></div>
+            </div>
+            <div class="stat-card stat-green">
+              <div class="stat-icon">🛒</div>
+              <div><div class="stat-value" id="statSales">0</div><div class="stat-label">Total Sales</div></div>
+            </div>
+            <div class="stat-card stat-purple">
+              <div class="stat-icon">📦</div>
+              <div><div class="stat-value" id="statProducts">0</div><div class="stat-label">Total Products</div></div>
+            </div>
+            <div class="stat-card stat-orange">
+              <div class="stat-icon">🧾</div>
+              <div><div class="stat-value" id="statOrders">0</div><div class="stat-label">Orders Count</div></div>
+            </div>
+            <div class="stat-card stat-red">
+              <div class="stat-icon">✅</div>
+              <div><div class="stat-value" id="statSold">0</div><div class="stat-label">Sold Products</div></div>
+            </div>
+            <div class="stat-card stat-teal">
+              <div class="stat-icon">📊</div>
+              <div><div class="stat-value" id="statStock">0</div><div class="stat-label">Available Stock</div></div>
+            </div>
+          </div>
+
+          <div class="dash-grid-2">
+            <div class="panel">
+              <h3>Sales Overview</h3>
+              <canvas id="salesChart" height="220"></canvas>
+            </div>
+            <div class="panel">
+              <h3>Top Categories</h3>
+              <canvas id="categoryChart" height="220"></canvas>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Recent Orders</h3>
+            <div class="table-wrap">
+              <table class="data-table" id="recentOrdersTable">
+                <thead><tr><th>Order ID</th><th>Customer</th><th>Product</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- STORE TAB -->
+        <div class="dash-tab" id="admin-tab-store">
+          <div class="dash-header"><h1>My Store</h1></div>
+          <div class="panel store-form-panel">
+            <form id="storeForm" onsubmit="return saveStore(event)">
+              <div class="store-logo-upload">
+                <img id="storeLogoPreview" src="https://placehold.co/120x120/6C5CE7/fff?text=Logo" alt="logo">
+                <input type="file" id="storeLogoInput" accept="image/*" onchange="previewStoreLogo(event)">
+              </div>
+              <div class="form-group">
+                <label>Store Name</label>
+                <input type="text" id="storeName" required placeholder="My Awesome Store">
+              </div>
+              <div class="form-group">
+                <label>Store Description</label>
+                <textarea id="storeDescription" rows="4" required placeholder="Tell customers about your store..."></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary">Save Store Details</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- PRODUCTS TAB -->
+        <div class="dash-tab" id="admin-tab-products">
+          <div class="dash-header">
+            <h1>Manage Products</h1>
+            <button class="btn btn-primary" onclick="openProductModal()">+ Add Product</button>
+          </div>
+          <div class="panel">
+            <div class="table-wrap">
+              <table class="data-table" id="adminProductsTable">
+                <thead><tr><th>Image</th><th>Name</th><th>Category</th><th>Price</th><th>Discount</th><th>Stock</th><th>Rating</th><th>Actions</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ORDERS TAB -->
+        <div class="dash-tab" id="admin-tab-orders">
+          <div class="dash-header"><h1>Order Management</h1></div>
+          <div class="panel">
+            <div class="table-wrap">
+              <table class="data-table" id="adminOrdersTable">
+                <thead><tr><th>Order ID</th><th>Customer</th><th>Items</th><th>Total</th><th>Status</th><th>Date</th><th>Update Status</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ANALYTICS TAB -->
+        <div class="dash-tab" id="admin-tab-analytics">
+          <div class="dash-header"><h1>Product Performance</h1></div>
+          <div class="panel">
+            <canvas id="performanceChart" height="240"></canvas>
+          </div>
+          <div class="panel">
+            <h3>Performance Table</h3>
+            <div class="table-wrap">
+              <table class="data-table" id="performanceTable">
+                <thead><tr><th>Product</th><th>Sold</th><th>Stock</th><th>Revenue</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- PROFILE TAB -->
+        <div class="dash-tab" id="admin-tab-profile">
+          <div class="dash-header"><h1>Admin Profile</h1></div>
+          <div class="panel profile-panel" id="adminProfilePanel"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ USER DASHBOARD ============ -->
+  <section id="view-userDashboard" class="view dash-view">
+    <div class="dash-layout">
+      <aside class="sidebar">
+        <div class="sidebar-profile">
+          <div class="avatar avatar-user" id="userAvatar">U</div>
+          <div>
+            <div class="sidebar-name" id="userSidebarName">User</div>
+            <div class="sidebar-role">Customer Account</div>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a href="#" class="sidebar-link active" data-tab="profile" onclick="switchUserTab('profile')">👤 Profile</a>
+          <a href="#" class="sidebar-link" data-tab="address" onclick="switchUserTab('address')">📍 Address Book</a>
+          <a href="#" class="sidebar-link" data-tab="orders" onclick="switchUserTab('orders')">📦 My Orders</a>
+          <a href="#" class="sidebar-link" data-tab="spending" onclick="switchUserTab('spending')">💳 Spending</a>
+          <a href="#" class="sidebar-link sidebar-logout" onclick="logout()">🚪 Logout</a>
+        </nav>
+      </aside>
+
+      <div class="dash-content">
+        <div class="dash-tab active" id="user-tab-profile">
+          <div class="dash-header"><h1>My Profile</h1></div>
+          <div class="panel profile-panel" id="userProfilePanel"></div>
+        </div>
+
+        <div class="dash-tab" id="user-tab-address">
+          <div class="dash-header">
+            <h1>Address Book</h1>
+            <button class="btn btn-primary" onclick="openAddressModal()">+ Add Address</button>
+          </div>
+          <div class="address-grid" id="addressGrid"></div>
+        </div>
+
+        <div class="dash-tab" id="user-tab-orders">
+          <div class="dash-header"><h1>My Orders</h1></div>
+          <div class="panel">
+            <div class="table-wrap">
+              <table class="data-table" id="userOrdersTable">
+                <thead><tr><th>Order ID</th><th>Items</th><th>Total</th><th>Status</th><th>Date</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="dash-tab" id="user-tab-spending">
+          <div class="dash-header"><h1>Spending Summary</h1></div>
+          <div class="stats-grid">
+            <div class="stat-card stat-blue">
+              <div class="stat-icon">💳</div>
+              <div><div class="stat-value" id="userTotalSpending">$0</div><div class="stat-label">Total Spent</div></div>
+            </div>
+            <div class="stat-card stat-green">
+              <div class="stat-icon">📦</div>
+              <div><div class="stat-value" id="userTotalOrders">0</div><div class="stat-label">Total Orders</div></div>
+            </div>
+            <div class="stat-card stat-purple">
+              <div class="stat-icon">⭐</div>
+              <div><div class="stat-value" id="userMemberSince">-</div><div class="stat-label">Member Since</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>Spending Trend</h3>
+            <canvas id="spendingChart" height="220"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRODUCT LISTING PAGE ============ -->
+  <section id="view-products" class="view">
+    <div class="container">
+      <div class="listing-layout">
+        <aside class="filters-panel">
+          <h3>Filters</h3>
+          <div class="filter-group">
+            <label>Category</label>
+            <select id="filterCategory" onchange="applyFilters()">
+              <option value="all">All Categories</option>
+              <option value="Electronics">Electronics</option>
+              <option value="Fashion">Fashion</option>
+              <option value="Home">Home & Living</option>
+              <option value="Beauty">Beauty</option>
+              <option value="Sports">Sports</option>
+              <option value="Books">Books</option>
+              <option value="Toys">Toys</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Sort By</label>
+            <select id="filterSort" onchange="applyFilters()">
+              <option value="default">Featured</option>
+              <option value="priceLow">Price: Low to High</option>
+              <option value="priceHigh">Price: High to Low</option>
+              <option value="rating">Top Rated</option>
+              <option value="newest">Newest</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label>Max Price: $<span id="priceRangeVal">1000</span></label>
+            <input type="range" id="filterPrice" min="0" max="1000" value="1000" oninput="applyFilters()">
+          </div>
+          <div class="filter-group">
+            <label>Minimum Rating</label>
+            <div class="rating-filter" id="ratingFilter">
+              <button class="rf-btn active" data-rating="0" onclick="setRatingFilter(0)">All</button>
+              <button class="rf-btn" data-rating="4" onclick="setRatingFilter(4)">4★ & up</button>
+              <button class="rf-btn" data-rating="3" onclick="setRatingFilter(3)">3★ & up</button>
+            </div>
+          </div>
+          <button class="btn btn-outline btn-full" onclick="resetFilters()">Reset Filters</button>
+        </aside>
+        <div class="listing-main">
+          <div class="listing-header">
+            <h2 id="listingTitle">All Products</h2>
+            <span id="listingCount">0 products</span>
+          </div>
+          <div class="product-grid" id="productListingGrid"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRODUCT DETAIL PAGE ============ -->
+  <section id="view-productDetail" class="view">
+    <div class="container" id="productDetailContent"></div>
+    <div class="container">
+      <h3 class="section-title">You May Also Like</h3>
+      <div class="product-grid" id="relatedProducts"></div>
+    </div>
+  </section>
+
+  <!-- ============ CART PAGE ============ -->
+  <section id="view-cart" class="view">
+    <div class="container">
+      <h1 class="page-heading-sm">Shopping Cart</h1>
+      <div class="cart-layout" id="cartLayout">
+        <div class="cart-items" id="cartItemsList"></div>
+        <div class="cart-summary panel">
+          <h3>Order Summary</h3>
+          <div class="summary-row"><span>Subtotal</span><span id="cartSubtotal">$0.00</span></div>
+          <div class="summary-row"><span>Discount</span><span id="cartDiscount">-$0.00</span></div>
+          <div class="summary-row"><span>Shipping</span><span id="cartShipping">$5.00</span></div>
+          <div class="summary-row total-row"><span>Total</span><span id="cartTotal">$0.00</span></div>
+          <button class="btn btn-primary btn-full" onclick="goToCheckout()">Proceed to Checkout →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CHECKOUT PAGE ============ -->
+  <section id="view-checkout" class="view">
+    <div class="container">
+      <h1 class="page-heading-sm">Checkout</h1>
+      <div class="checkout-layout">
+        <div class="checkout-form">
+          <div class="panel">
+            <h3>1. Customer Details</h3>
+            <div class="form-row">
+              <div class="form-group"><label>Full Name</label><input type="text" id="checkoutName"></div>
+              <div class="form-group"><label>Phone</label><input type="tel" id="checkoutPhone"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>2. Shipping Address</h3>
+            <div class="form-group"><label>Street Address</label><input type="text" id="checkoutAddress" placeholder="House #, Street"></div>
+            <div class="form-row">
+              <div class="form-group"><label>City</label><input type="text" id="checkoutCity"></div>
+              <div class="form-group"><label>Postal Code</label><input type="text" id="checkoutZip"></div>
+            </div>
+          </div>
+          <div class="panel">
+            <h3>3. Payment Method</h3>
+            <div class="payment-options" id="paymentOptions">
+              <label class="pay-option"><input type="radio" name="payment" value="card" checked><span>💳 Credit / Debit Card</span></label>
+              <label class="pay-option"><input type="radio" name="payment" value="cod"><span>💵 Cash on Delivery</span></label>
+              <label class="pay-option"><input type="radio" name="payment" value="wallet"><span>📱 Mobile Wallet</span></label>
+            </div>
+            <div id="cardFields" class="card-fields">
+              <div class="form-group"><label>Card Number</label><input type="text" id="cardNumber" placeholder="4242 4242 4242 4242"></div>
+              <div class="form-row">
+                <div class="form-group"><label>Expiry</label><input type="text" id="cardExpiry" placeholder="MM/YY"></div>
+                <div class="form-group"><label>CVV</label><input type="text" id="cardCvv" placeholder="123"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="checkout-summary panel">
+          <h3>Order Summary</h3>
+          <div id="checkoutItemsSummary"></div>
+          <div class="summary-row"><span>Subtotal</span><span id="checkoutSubtotal">$0.00</span></div>
+          <div class="summary-row"><span>Shipping</span><span id="checkoutShipping">$5.00</span></div>
+          <div class="summary-row total-row"><span>Total</span><span id="checkoutTotal">$0.00</span></div>
+          <button class="btn btn-primary btn-full" onclick="placeOrder()">Place Order 🔒</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ORDER RECEIPT (after checkout) ============ -->
+  <section id="view-receipt" class="view">
+    <div class="container">
+      <div class="receipt-box" id="receiptContent"></div>
+    </div>
+  </section>
+
+  <!-- ============ ORDER HISTORY PAGE ============ -->
+  <section id="view-orderHistory" class="view">
+    <div class="container">
+      <h1 class="page-heading-sm">Order History</h1>
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="data-table" id="orderHistoryTable">
+            <thead><tr><th>Order ID</th><th>Items</th><th>Total</th><th>Status</th><th>Date</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="footer">
+  <div class="container footer-grid">
+    <div>
+      <h4>Carto</h4>
+      <p>Your trusted online marketplace for everything you need.</p>
+    </div>
+    <div>
+      <h4>Customer Service</h4>
+      <p>Help Center</p><p>Returns</p><p>Shipping Info</p>
+    </div>
+    <div>
+      <h4>About</h4>
+      <p>About Us</p><p>Careers</p><p>Press</p>
+    </div>
+    <div>
+      <h4>Sell on Carto</h4>
+      <p onclick="navigateTo('adminLogin')" style="cursor:pointer">Become a Seller</p>
+    </div>
+  </div>
+  <div class="footer-bottom">© 2026 Carto. All rights reserved. (Demo Project)</div>
+</footer>
+
+<!-- ===================== MODALS ===================== -->
+<div class="modal-overlay" id="productModalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="productModalTitle">Add Product</h3>
+      <button class="modal-close" onclick="closeProductModal()">×</button>
+    </div>
+    <form id="productForm" onsubmit="return saveProduct(event)">
+      <input type="hidden" id="productId">
+      <div class="store-logo-upload">
+        <img id="productImagePreview" src="https://placehold.co/150x150/e9ecef/666?text=Product" alt="product">
+        <input type="file" id="productImageInput" accept="image/*" onchange="previewProductImage(event)">
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Product Name</label><input type="text" id="productName" required></div>
+        <div class="form-group">
+          <label>Category</label>
+          <select id="productCategory" required>
+            <option value="Electronics">Electronics</option>
+            <option value="Fashion">Fashion</option>
+            <option value="Home">Home & Living</option>
+            <option value="Beauty">Beauty</option>
+            <option value="Sports">Sports</option>
+            <option value="Books">Books</option>
+            <option value="Toys">Toys</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group"><label>Description</label><textarea id="productDescription" rows="3" required></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>Price ($)</label><input type="number" id="productPrice" min="0" step="0.01" required></div>
+        <div class="form-group"><label>Discount (%)</label><input type="number" id="productDiscount" min="0" max="90" value="0"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>Stock Quantity</label><input type="number" id="productStock" min="0" required></div>
+        <div class="form-group"><label>Rating (1-5)</label><input type="number" id="productRating" min="1" max="5" step="0.1" value="4.5"></div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Save Product</button>
+    </form>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addressModalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add Address</h3>
+      <button class="modal-close" onclick="closeAddressModal()">×</button>
+    </div>
+    <form id="addressForm" onsubmit="return saveAddress(event)">
+      <div class="form-group"><label>Label</label><input type="text" id="addrLabel" placeholder="Home / Office" required></div>
+      <div class="form-group"><label>Full Address</label><textarea id="addrFull" rows="2" required></textarea></div>
+      <div class="form-row">
+        <div class="form-group"><label>City</label><input type="text" id="addrCity" required></div>
+        <div class="form-group"><label>Phone</label><input type="tel" id="addrPhone" required></div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Save Address</button>
+    </form>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
