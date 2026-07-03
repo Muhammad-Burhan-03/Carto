@@ -475,77 +475,78 @@ function buyNow(productId){
 }
 
 /* =========================================================
-   CART
+   CART OPERATIONS
    ========================================================= */
-async function addToCart(productId, qty=1, redirectToCheckout=false){
+async function addToCart(productId, quantity = 1, redirectToCheckout = false){
   const session = getSession();
-  if(!session || session.role !== 'user'){ navigateTo('userLogin'); showToast('Please login to add items to cart','info'); return; }
-  try {
-    await Api.addToCart(productId, qty);
-    showToast('Added to cart!','success');
+  if(!session || session.role !== 'user'){
+    showToast('Please login to add items to your cart', 'info');
+    navigateTo('userLogin');
+    return;
+  }
+  try{
+    await Api.addToCart(productId, quantity);
+    showToast('Added to cart!', 'success');
     await updateNavbar();
-    if(redirectToCheckout) navigateTo('checkout');
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
+    if(redirectToCheckout) navigateTo('cart');
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
 }
 
 async function renderCart(){
   const { items } = await Api.getCart();
   const list = document.getElementById('cartItemsList');
-  const summaryPanel = document.querySelector('.cart-summary');
 
   if(!items.length){
     list.innerHTML = `<div class="empty-state"><div class="ei">🛒</div><h3>Your cart is empty</h3><p>Add some products to get started</p><button class="btn btn-primary" onclick="navigateTo('products')">Browse Products</button></div>`;
-    if(summaryPanel) summaryPanel.style.display = 'none';
-    document.getElementById('cartSubtotal').textContent = '$0.00';
-    document.getElementById('cartDiscount').textContent = '-$0.00';
-    document.getElementById('cartTotal').textContent = '$0.00';
+    setCartTotals(0, 0);
     return;
   }
-  if(summaryPanel) summaryPanel.style.display = '';
 
   let subtotal = 0, discountTotal = 0;
   list.innerHTML = items.map(it=>{
     const p = it.product;
     const price = Number(p.price), discount = Number(p.discount)||0;
-    const lineFinal = price*(1-discount/100)*it.quantity;
-    subtotal += price*it.quantity;
-    discountTotal += (price*it.quantity) - lineFinal;
+    const lineFinal = price * (1-discount/100) * it.quantity;
+    subtotal += price * it.quantity;
+    discountTotal += (price - price*(1-discount/100)) * it.quantity;
     return `
       <div class="cart-item">
         <img src="${p.image}" alt="${escapeHtml(p.name)}">
         <div class="cart-item-info">
-          <h4>${escapeHtml(p.name)}</h4>
-          <p>${discount>0 ? `$${(price*(1-discount/100)).toFixed(2)} each (was $${price.toFixed(2)})` : `$${price.toFixed(2)} each`}</p>
-          <div class="cart-item-qty">
-            <button onclick="updateCartQty(${it.id}, ${it.quantity-1}, ${p.stock})">−</button>
+          <div class="cart-item-name">${escapeHtml(p.name)}</div>
+          <div class="cart-item-price">$${(price*(1-discount/100)).toFixed(2)} each</div>
+          <div class="qty-selector">
+            <button onclick="updateCartQty(${it.id}, ${it.quantity-1})">−</button>
             <span>${it.quantity}</span>
-            <button onclick="updateCartQty(${it.id}, ${it.quantity+1}, ${p.stock})">+</button>
+            <button onclick="updateCartQty(${it.id}, ${it.quantity+1})">+</button>
           </div>
         </div>
-        <div class="cart-item-price">$${lineFinal.toFixed(2)}</div>
-        <span class="remove-item" onclick="removeCartItem(${it.id})" title="Remove">✕</span>
+        <div class="cart-item-total">$${lineFinal.toFixed(2)}</div>
+        <button class="cart-item-remove" onclick="removeCartItem(${it.id})" title="Remove">🗑</button>
       </div>
     `;
   }).join('');
 
-  const shipping = 5;
-  const total = subtotal - discountTotal + shipping;
-  document.getElementById('cartSubtotal').textContent = `$${subtotal.toFixed(2)}`;
-  document.getElementById('cartDiscount').textContent = `-$${discountTotal.toFixed(2)}`;
-  document.getElementById('cartShipping').textContent = `$${shipping.toFixed(2)}`;
-  document.getElementById('cartTotal').textContent = `$${total.toFixed(2)}`;
+  setCartTotals(subtotal, discountTotal);
 }
 
-async function updateCartQty(itemId, newQty, maxStock){
+function setCartTotals(subtotal, discount){
+  const shipping = subtotal > 0 ? 5 : 0;
+  document.getElementById('cartSubtotal').textContent = `$${subtotal.toFixed(2)}`;
+  document.getElementById('cartDiscount').textContent = `-$${discount.toFixed(2)}`;
+  document.getElementById('cartShipping').textContent = `$${shipping.toFixed(2)}`;
+  document.getElementById('cartTotal').textContent = `$${(subtotal-discount+shipping).toFixed(2)}`;
+}
+
+async function updateCartQty(itemId, newQty){
   if(newQty < 1){ return removeCartItem(itemId); }
-  if(newQty > maxStock){ showToast(`Only ${maxStock} in stock`,'error'); return; }
-  try { await Api.updateCartItem(itemId, newQty); await renderCart(); await updateNavbar(); }
-  catch(err){ showToast(apiErrorMessage(err),'error'); }
+  try{ await Api.updateCartItem(itemId, newQty); await renderCart(); await updateNavbar(); }
+  catch(err){ showToast(apiErrorMessage(err), 'error'); }
 }
 
 async function removeCartItem(itemId){
-  try { await Api.removeCartItem(itemId); showToast('Item removed','info'); await renderCart(); await updateNavbar(); }
-  catch(err){ showToast(apiErrorMessage(err),'error'); }
+  try{ await Api.removeCartItem(itemId); await renderCart(); await updateNavbar(); showToast('Item removed', 'info'); }
+  catch(err){ showToast(apiErrorMessage(err), 'error'); }
 }
 
 function goToCheckout(){
@@ -553,234 +554,154 @@ function goToCheckout(){
 }
 
 /* =========================================================
-   WISHLIST
+   CHECKOUT / PLACE ORDER
    ========================================================= */
-async function toggleWishlist(productId){
-  const session = getSession();
-  if(!session || session.role!=='user'){ navigateTo('userLogin'); return; }
-  try { await Api.addToWishlist(productId); showToast('Added to wishlist ❤️','success'); }
-  catch(err){ showToast(apiErrorMessage(err),'error'); }
-}
+let checkoutCartSnapshot = null;
+let selectedAddressId = null;
 
-/* =========================================================
-   ADDRESSES (used by the Address Book tab in the user dashboard)
-   ========================================================= */
-let editingAddressId = null;
-
-function openAddressModal(address=null){
-  editingAddressId = address ? address.id : null;
-  document.getElementById('addrLabel').value = address ? address.label : 'Home';
-  document.getElementById('addrFull').value = address ? address.fullAddress : '';
-  document.getElementById('addrCity').value = address ? address.city : '';
-  document.getElementById('addrPhone').value = address ? (address.phone||'') : '';
-  document.getElementById('addressModalOverlay').classList.add('open');
-}
-function closeAddressModal(){ document.getElementById('addressModalOverlay').classList.remove('open'); }
-
-async function saveAddress(e){
-  e.preventDefault();
-  const payload = {
-    label: document.getElementById('addrLabel').value.trim() || 'Home',
-    fullAddress: document.getElementById('addrFull').value.trim(),
-    city: document.getElementById('addrCity').value.trim(),
-    phone: document.getElementById('addrPhone').value.trim()
-  };
-  try {
-    if(editingAddressId) await Api.updateAddress(editingAddressId, payload);
-    else await Api.createAddress(payload);
-    showToast('Address saved','success');
-    closeAddressModal();
-    if(currentView==='userDashboard') await renderAddressBook();
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
-  return false;
-}
-
-async function deleteAddress(id){
-  try {
-    await Api.deleteAddress(id);
-    showToast('Address deleted','info');
-    if(currentView==='userDashboard') await renderAddressBook();
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
-}
-
-async function renderAddressBook(){
-  const list = await Api.getAddresses();
-  const grid = document.getElementById('addressGrid');
-  if(!list.length){
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="ei">📍</div><h3>No saved addresses</h3><p>Add an address to speed up checkout</p></div>`;
-    return;
-  }
-  grid.innerHTML = list.map(a=>`
-    <div class="panel address-card">
-      <h4>${escapeHtml(a.label)} ${a.isDefault ? '<span class="badge-pkg">Default</span>' : ''}</h4>
-      <p>${escapeHtml(a.fullAddress)}</p>
-      <p>${escapeHtml(a.city)}</p>
-      <p>${escapeHtml(a.phone||'')}</p>
-      <div class="detail-actions" style="margin-top:10px">
-        <button class="btn btn-sm btn-outline" onclick='openAddressModal(${JSON.stringify(a)})'>Edit</button>
-        <button class="btn btn-sm btn-outline" onclick="deleteAddress(${a.id})">Delete</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-/* =========================================================
-   CHECKOUT
-   Uses a simple freeform address form (matching the existing
-   UI) rather than an address-picker; the entered address is
-   saved to the user's address book and used for the order.
-   ========================================================= */
 async function renderCheckout(){
-  const { items } = await Api.getCart();
-  if(!items.length){ showToast('Your cart is empty','info'); navigateTo('cart'); return; }
+  const [{ items }, user, addresses] = await Promise.all([Api.getCart(), getCurrentUser(), Api.getAddresses()]);
+  checkoutCartSnapshot = items;
+
+  if(!items.length){ navigateTo('cart'); return; }
+
+  if(user){
+    document.getElementById('checkoutName').value = user.name;
+    document.getElementById('checkoutPhone').value = user.phone || '';
+  }
+
+  const defaultAddr = addresses.find(a=>a.isDefault) || addresses[0];
+  if(defaultAddr){
+    selectedAddressId = defaultAddr.id;
+    document.getElementById('checkoutAddress').value = defaultAddr.fullAddress;
+    document.getElementById('checkoutCity').value = defaultAddr.city;
+  } else {
+    selectedAddressId = null;
+  }
 
   let subtotal = 0;
-  const rows = items.map(it=>{
-    const p = it.product, price = Number(p.price), discount = Number(p.discount)||0;
-    const lineFinal = price*(1-discount/100)*it.quantity;
-    subtotal += lineFinal;
-    return `<div class="checkout-item-row"><span>${escapeHtml(p.name)} × ${it.quantity}</span><span>$${lineFinal.toFixed(2)}</span></div>`;
+  document.getElementById('checkoutItemsSummary').innerHTML = items.map(it=>{
+    const p = it.product;
+    const price = Number(p.price)*(1-(Number(p.discount)||0)/100);
+    subtotal += price * it.quantity;
+    return `<div class="summary-row"><span>${escapeHtml(p.name)} × ${it.quantity}</span><span>$${(price*it.quantity).toFixed(2)}</span></div>`;
   }).join('');
 
-  const shipping = 5, total = subtotal + shipping;
-  document.getElementById('checkoutItemsSummary').innerHTML = rows;
+  const shipping = 5;
   document.getElementById('checkoutSubtotal').textContent = `$${subtotal.toFixed(2)}`;
   document.getElementById('checkoutShipping').textContent = `$${shipping.toFixed(2)}`;
-  document.getElementById('checkoutTotal').textContent = `$${total.toFixed(2)}`;
-
-  // Prefill from profile + most recent/default saved address, if any.
-  try {
-    const user = await getCurrentUser();
-    if(user){
-      document.getElementById('checkoutName').value = user.name || '';
-      document.getElementById('checkoutPhone').value = user.phone || '';
-    }
-    const addresses = await Api.getAddresses();
-    const def = addresses.find(a=>a.isDefault) || addresses[0];
-    if(def){
-      document.getElementById('checkoutAddress').value = def.fullAddress;
-      document.getElementById('checkoutCity').value = def.city;
-      if(!document.getElementById('checkoutPhone').value) document.getElementById('checkoutPhone').value = def.phone || '';
-    }
-  } catch { /* prefill is best-effort */ }
-
-  document.getElementById('cardFields').classList.toggle('show', document.querySelector('input[name="payment"]:checked')?.value === 'card');
+  document.getElementById('checkoutTotal').textContent = `$${(subtotal+shipping).toFixed(2)}`;
 }
 
 async function placeOrder(){
-  const name = document.getElementById('checkoutName').value.trim();
-  const phone = document.getElementById('checkoutPhone').value.trim();
-  const fullAddressRaw = document.getElementById('checkoutAddress').value.trim();
+  const addressFull = document.getElementById('checkoutAddress').value.trim();
   const city = document.getElementById('checkoutCity').value.trim();
-  const zip = document.getElementById('checkoutZip').value.trim();
-
-  if(!name || !phone || !fullAddressRaw || !city){
-    showToast('Please fill in all required delivery details','error');
-    return false;
+  const phone = document.getElementById('checkoutPhone').value.trim();
+  const name = document.getElementById('checkoutName').value.trim();
+  if(!addressFull || !city || !phone || !name){
+    showToast('Please fill in all customer & shipping details', 'error');
+    return;
   }
+  const paymentMethod = document.querySelector('input[name="payment"]:checked')?.value || 'cod';
 
-  const paymentRadio = document.querySelector('input[name="payment"]:checked');
-  const paymentMethod = paymentRadio ? paymentRadio.value : 'cod';
-  const fullAddress = zip ? `${fullAddressRaw}, ${zip}` : fullAddressRaw;
+  try{
+    let addressId = selectedAddressId;
+    // If the user edited the address fields (or has none saved yet), save
+    // a fresh address so the order can reference it via FK.
+    const addresses = await Api.getAddresses();
+    const match = addresses.find(a=>a.fullAddress===addressFull && a.city===city);
+    if(match){ addressId = match.id; }
+    else {
+      const created = await Api.createAddress({ label:'Checkout', fullAddress: addressFull, city, phone, isDefault: addresses.length===0 });
+      addressId = created.id;
+    }
 
-  try {
-    // Persist this address to the user's address book, then check out
-    // against it. This keeps the simple single-page checkout UX while
-    // still using normalized, reusable address records server-side.
-    const address = await Api.createAddress({ label: 'Delivery', fullAddress, city, phone });
-    const { order } = await Api.checkout({ addressId: address.id, paymentMethod });
-    await updateNavbar();
-    renderReceipt(order);
+    const { order } = await Api.checkout({ addressId, paymentMethod });
+    showToast('Order placed successfully! 🎉', 'success');
+    await renderReceipt(order.id);
     navigateTo('receipt');
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
-  return false;
+    await updateNavbar();
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
 }
 
-function renderReceipt(order){
+async function renderReceipt(orderId){
+  const order = await Api.getOrder(orderId);
   document.getElementById('receiptContent').innerHTML = `
-    <div class="receipt-check">✅</div>
-    <h2>Order Placed Successfully!</h2>
-    <div class="receipt-id">Thank you for your purchase. Your order has been received.</div>
+    <div class="receipt-icon">✅</div>
+    <h1>Order Placed Successfully!</h1>
+    <p class="receipt-sub">Thank you for shopping with Carto</p>
     <div class="receipt-details">
-      <div class="receipt-row"><span>Order ID</span><span>#${order.id}</span></div>
-      <div class="receipt-row"><span>Status</span><span>${order.status}</span></div>
-      <div class="receipt-row"><span>Payment Method</span><span>${order.paymentMethod}</span></div>
-      <div class="receipt-row" style="font-weight:700;font-size:15px"><span>Total Paid</span><span>$${Number(order.total).toFixed(2)}</span></div>
+      <div class="summary-row"><span>Order ID</span><span>#${order.id}</span></div>
+      <div class="summary-row"><span>Status</span><span>${order.status}</span></div>
+      <div class="summary-row"><span>Payment Method</span><span>${order.paymentMethod}</span></div>
+      <div class="summary-row total-row"><span>Total Paid</span><span>$${Number(order.total).toFixed(2)}</span></div>
     </div>
-    <div class="detail-actions" style="justify-content:center">
-      <button class="btn btn-outline" onclick="navigateTo('orderHistory')">View Orders</button>
-      <button class="btn btn-primary" onclick="navigateTo('products')">Continue Shopping</button>
+    <div class="receipt-items">
+      ${order.items.map(it=>`<div class="summary-row"><span>${escapeHtml(it.name)} × ${it.quantity}</span><span>$${(Number(it.price)*it.quantity).toFixed(2)}</span></div>`).join('')}
+    </div>
+    <div class="receipt-actions">
+      <button class="btn btn-primary" onclick="navigateTo('orderHistory')">View Order History</button>
+      <button class="btn btn-outline" onclick="navigateTo('products')">Continue Shopping</button>
     </div>
   `;
 }
 
 /* =========================================================
-   ORDER HISTORY (USER)
+   ORDER HISTORY (user-facing)
    ========================================================= */
 async function renderOrderHistory(){
-  const ordersList = await Api.getOrders();
+  const orders = await Api.getOrders();
   const tbody = document.querySelector('#orderHistoryTable tbody');
-  if(!ordersList.length){
+  if(!orders.length){
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="ei">📦</div><h3>No orders yet</h3></div></td></tr>`;
     return;
   }
-  const rowsHtml = await Promise.all(ordersList.map(async o=>{
-    const full = await Api.getOrder(o.id).catch(()=>({items:[]}));
-    const itemCount = full.items ? full.items.reduce((s,it)=>s+it.quantity,0) : '-';
-    return `
-      <tr>
-        <td>#${o.id}</td>
-        <td>${itemCount}</td>
-        <td>$${Number(o.total).toFixed(2)}</td>
-        <td><span class="status-badge status-${o.status.toLowerCase()}">${o.status}</span></td>
-        <td>${new Date(o.createdAt).toLocaleDateString()}</td>
-        <td><button class="btn btn-sm btn-outline" onclick="viewOrderDetail(${o.id})">View</button></td>
-      </tr>
-    `;
+  const rows = await Promise.all(orders.map(async o=>{
+    const full = await Api.getOrder(o.id);
+    return `<tr>
+      <td>#${o.id}</td>
+      <td>${full.items.length} item(s)</td>
+      <td>$${Number(o.total).toFixed(2)}</td>
+      <td><span class="status-badge status-${o.status.toLowerCase()}">${o.status}</span></td>
+      <td>${new Date(o.createdAt).toLocaleDateString()}</td>
+      <td><button class="btn-link" onclick="navigateTo('receipt'); renderReceipt(${o.id})">View</button></td>
+    </tr>`;
   }));
-  tbody.innerHTML = rowsHtml.join('');
-}
-
-async function viewOrderDetail(orderId){
-  try {
-    const order = await Api.getOrder(orderId);
-    const lines = order.items.map(it=>`${it.name} x${it.quantity} - $${Number(it.price).toFixed(2)}`).join('\n');
-    alert(`Order #${order.id}\nStatus: ${order.status}\nTotal: $${Number(order.total).toFixed(2)}\n\nItems:\n${lines}`);
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
+  tbody.innerHTML = rows.join('');
 }
 
 /* =========================================================
    ADMIN (SELLER) DASHBOARD
    ========================================================= */
-async function renderAdminDashboard(){
-  const admin = await getCurrentAdmin();
-  if(!admin) return;
-
-  document.getElementById('adminAvatar').textContent = admin.name.charAt(0).toUpperCase();
-  document.getElementById('adminSidebarName').textContent = admin.name;
-  document.getElementById('adminPkgBadge').textContent = `${(admin.packageId||'basic').charAt(0).toUpperCase()}${(admin.packageId||'basic').slice(1)} Plan`;
-
-  switchAdminTab(currentAdminTab || 'overview');
-}
-
-function switchAdminTab(tab){
+async function switchAdminTab(tab){
   currentAdminTab = tab;
   document.querySelectorAll('#adminSidebar .sidebar-link[data-tab]').forEach(a=>a.classList.toggle('active', a.dataset.tab===tab));
-  document.querySelectorAll('.dash-view#view-adminDashboard .dash-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('#view-adminDashboard .dash-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('admin-tab-'+tab).classList.add('active');
 
-  if(tab==='overview') renderAdminOverview();
-  else if(tab==='store') renderAdminStore();
-  else if(tab==='products') renderAdminProducts();
-  else if(tab==='orders') renderAdminOrders();
-  else if(tab==='analytics') renderAdminAnalytics();
-  else if(tab==='profile') renderAdminProfile();
+  try{
+    if(tab==='overview') await renderAdminOverview();
+    else if(tab==='store') await renderAdminStore();
+    else if(tab==='products') await renderAdminProducts();
+    else if(tab==='orders') await renderAdminOrders();
+    else if(tab==='analytics') await renderAdminAnalytics();
+    else if(tab==='profile') await renderAdminProfile();
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
+}
+
+async function renderAdminDashboard(){
+  const seller = await getCurrentAdmin();
+  if(!seller) return;
+  document.getElementById('adminSidebarName').textContent = seller.name;
+  document.getElementById('adminAvatar').textContent = seller.name.charAt(0).toUpperCase();
+  document.getElementById('adminPkgBadge').textContent = `${(seller.packageId||'basic').charAt(0).toUpperCase()+(seller.packageId||'basic').slice(1)} Plan`;
+  await switchAdminTab(currentAdminTab || 'overview');
 }
 
 async function renderAdminOverview(){
-  const admin = await getCurrentAdmin();
-  const dash = await Api.sellerDashboard(admin.id);
-  const orders = await Api.getOrders(); // seller role -> returns {orderItem, order} rows for this seller
+  const seller = await getCurrentAdmin();
+  const dash = await Api.sellerDashboard(seller.id);
+  const orders = await Api.getOrders(); // seller role -> returns {orderItem, order} rows
 
   document.getElementById('statRevenue').textContent = `$${dash.totalRevenue.toFixed(2)}`;
   document.getElementById('statSales').textContent = dash.orderItemCount;
@@ -789,10 +710,7 @@ async function renderAdminOverview(){
   document.getElementById('statSold').textContent = dash.totalSold;
   document.getElementById('statStock').textContent = dash.products.reduce((s,p)=>s+p.stock,0);
 
-  drawSalesChart(orders);
-  drawCategoryChart(dash.products);
-
-  const recent = orders.slice(0, 8);
+  const recent = orders.slice(0,8);
   const tbody = document.querySelector('#recentOrdersTable tbody');
   tbody.innerHTML = recent.length ? recent.map(r=>`
     <tr>
@@ -803,79 +721,151 @@ async function renderAdminOverview(){
       <td><span class="status-badge status-${r.order.status.toLowerCase()}">${r.order.status}</span></td>
       <td>${new Date(r.order.createdAt).toLocaleDateString()}</td>
     </tr>
-  `).join('') : `<tr><td colspan="6"><div class="empty-state"><div class="ei">🧾</div><h3>No orders yet</h3></div></td></tr>`;
+  `).join('') : `<tr><td colspan="6">No orders yet</td></tr>`;
+
+  drawSalesChart(dash.products);
+  drawCategoryChart(dash.products);
 }
 
 async function renderAdminStore(){
-  const admin = await getCurrentAdmin();
-  document.getElementById('storeName').value = admin.storeName || '';
-  document.getElementById('storeDescription').value = admin.storeDescription || '';
-  document.getElementById('storeLogoPreview').src = admin.storeLogo || 'https://placehold.co/120x120/6C5CE7/fff?text=Logo';
+  const seller = await getCurrentAdmin();
+  document.getElementById('storeName').value = seller.storeName || '';
+  document.getElementById('storeDescription').value = seller.storeDescription || '';
+  document.getElementById('storeLogoPreview').src = seller.storeLogo || 'https://placehold.co/120x120/6C5CE7/fff?text=Logo';
 }
 
 function previewStoreLogo(e){
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = () => { document.getElementById('storeLogoPreview').src = reader.result; };
+  reader.onload = ev => { document.getElementById('storeLogoPreview').src = ev.target.result; };
   reader.readAsDataURL(file);
 }
 
 async function saveStore(e){
   e.preventDefault();
-  const payload = {
-    storeName: document.getElementById('storeName').value.trim(),
-    storeDescription: document.getElementById('storeDescription').value.trim(),
-    storeLogo: document.getElementById('storeLogoPreview').src
-  };
-  try {
-    await Api.updateStore(payload);
+  try{
+    await Api.updateStore({
+      storeName: document.getElementById('storeName').value.trim(),
+      storeDescription: document.getElementById('storeDescription').value.trim(),
+      storeLogo: document.getElementById('storeLogoPreview').src
+    });
     invalidateProfileCache();
-    showToast('Store details saved','success');
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
+    showToast('Store details saved!', 'success');
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
   return false;
 }
 
 async function renderAdminProducts(){
-  const admin = await getCurrentAdmin();
-  const dash = await Api.sellerDashboard(admin.id);
+  const seller = await getCurrentAdmin();
+  const { products: myProducts } = await Api.getProducts({ limit: 200 });
+  const mine = myProducts.filter(p=>p.sellerId === seller.id);
   const tbody = document.querySelector('#adminProductsTable tbody');
-  if(!dash.products.length){
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="ei">📦</div><h3>No products yet</h3><p>Add your first product to start selling</p></div></td></tr>`;
-    return;
-  }
-  tbody.innerHTML = dash.products.map(p=>`
+  tbody.innerHTML = mine.length ? mine.map(p=>`
     <tr>
-      <td><img src="${p.image}" style="width:44px;height:44px;border-radius:8px;object-fit:cover"></td>
+      <td><img src="${p.image}" class="table-thumb" alt=""></td>
       <td>${escapeHtml(p.name)}</td>
       <td>${escapeHtml(p.category||'-')}</td>
       <td>$${Number(p.price).toFixed(2)}</td>
       <td>${p.discount||0}%</td>
       <td>${p.stock}</td>
-      <td>${Number(p.rating||0).toFixed(1)} ⭐</td>
+      <td>${Number(p.rating).toFixed(1)} ★</td>
       <td>
-        <button class="btn btn-sm btn-outline" onclick='openProductModal(${JSON.stringify(p)})'>Edit</button>
-        <button class="btn btn-sm btn-outline" onclick="deleteProductAdmin(${p.id})">Delete</button>
+        <button class="btn-link" onclick='openProductModal(${JSON.stringify(p)})'>Edit</button>
+        <button class="btn-link danger" onclick="deleteProduct(${p.id})">Delete</button>
       </td>
     </tr>
-  `).join('');
+  `).join('') : `<tr><td colspan="8">No products yet. Click "+ Add Product" to get started.</td></tr>`;
 }
 
-let editingProductId = null;
+async function renderAdminOrders(){
+  const rows = await Api.getOrders();
+  const tbody = document.querySelector('#adminOrdersTable tbody');
+  tbody.innerHTML = rows.length ? rows.map(r=>`
+    <tr>
+      <td>#${r.order.id}</td>
+      <td>User #${r.order.userId}</td>
+      <td>${escapeHtml(r.orderItem.name)} × ${r.orderItem.quantity}</td>
+      <td>$${(Number(r.orderItem.price)*r.orderItem.quantity).toFixed(2)}</td>
+      <td><span class="status-badge status-${r.order.status.toLowerCase()}">${r.order.status}</span></td>
+      <td>${new Date(r.order.createdAt).toLocaleDateString()}</td>
+      <td>
+        <select onchange="updateOrderStatus(${r.order.id}, this.value)">
+          ${['Pending','Shipped','Delivered','Cancelled'].map(s=>`<option value="${s}" ${s===r.order.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+    </tr>
+  `).join('') : `<tr><td colspan="7">No orders yet</td></tr>`;
+}
 
-function openProductModal(product=null){
-  editingProductId = product ? product.id : null;
-  document.getElementById('productModalTitle').textContent = product ? 'Edit Product' : 'Add Product';
-  document.getElementById('productId').value = product ? product.id : '';
-  document.getElementById('productName').value = product ? product.name : '';
-  document.getElementById('productCategory').value = product ? (product.category || 'Electronics') : 'Electronics';
-  document.getElementById('productDescription').value = product ? (product.description||'') : '';
-  document.getElementById('productPrice').value = product ? product.price : '';
-  document.getElementById('productDiscount').value = product ? (product.discount||0) : 0;
-  document.getElementById('productStock').value = product ? product.stock : '';
-  document.getElementById('productRating').value = product ? (product.rating||4.5) : 4.5;
-  document.getElementById('productImagePreview').src = product ? product.image : 'https://placehold.co/150x150/e9ecef/666?text=Product';
-  document.getElementById('productModalOverlay').classList.add('open');
+async function updateOrderStatus(orderId, status){
+  try{ await Api.updateOrderStatus(orderId, status); showToast('Order status updated', 'success'); await renderAdminOrders(); }
+  catch(err){ showToast(apiErrorMessage(err), 'error'); }
+}
+
+async function renderAdminAnalytics(){
+  const seller = await getCurrentAdmin();
+  const dash = await Api.sellerDashboard(seller.id);
+  const tbody = document.querySelector('#performanceTable tbody');
+  tbody.innerHTML = dash.products.length ? dash.products.map(p=>`
+    <tr>
+      <td>${escapeHtml(p.name)}</td>
+      <td>${p.sold||0}</td>
+      <td>${p.stock}</td>
+      <td>$${((p.sold||0)*Number(p.price)).toFixed(2)}</td>
+    </tr>
+  `).join('') : `<tr><td colspan="4">No product data yet</td></tr>`;
+  drawPerformanceChart(dash.products);
+}
+
+async function renderAdminProfile(){
+  const seller = await getCurrentAdmin();
+  document.getElementById('adminProfilePanel').innerHTML = `
+    <div class="profile-field"><label>Name</label><input type="text" id="adminProfileName" value="${escapeHtml(seller.name)}"></div>
+    <div class="profile-field"><label>Email</label><input type="text" value="${escapeHtml(seller.email)}" disabled></div>
+    <div class="profile-field"><label>Phone</label><input type="text" id="adminProfilePhone" value="${escapeHtml(seller.phone||'')}"></div>
+    <div class="profile-field"><label>Plan</label><input type="text" value="${seller.packageId}" disabled></div>
+    <button class="btn btn-primary" onclick="saveAdminProfile()">Save Changes</button>
+    <button class="btn btn-outline" onclick="navigateTo('packages')" style="margin-left:8px">Change Plan</button>
+  `;
+}
+
+async function saveAdminProfile(){
+  try{
+    await Api.updateProfile({
+      name: document.getElementById('adminProfileName').value.trim(),
+      phone: document.getElementById('adminProfilePhone').value.trim()
+    });
+    invalidateProfileCache();
+    showToast('Profile updated', 'success');
+    await renderAdminDashboard();
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
+}
+
+/* =========================================================
+   PRODUCT MODAL (Add / Edit)
+   ========================================================= */
+function openProductModal(product){
+  const overlay = document.getElementById('productModalOverlay');
+  const form = document.getElementById('productForm');
+  form.reset();
+  if(product){
+    document.getElementById('productModalTitle').textContent = 'Edit Product';
+    document.getElementById('productId').value = product.id;
+    document.getElementById('productName').value = product.name;
+    document.getElementById('productCategory').value = product.category || 'Electronics';
+    document.getElementById('productDescription').value = product.description || '';
+    document.getElementById('productPrice').value = product.price;
+    document.getElementById('productDiscount').value = product.discount || 0;
+    document.getElementById('productStock').value = product.stock;
+    document.getElementById('productRating').value = product.rating || 4.5;
+    document.getElementById('productImagePreview').src = product.image || 'https://placehold.co/150x150/e9ecef/666?text=Product';
+  } else {
+    document.getElementById('productModalTitle').textContent = 'Add Product';
+    document.getElementById('productId').value = '';
+    document.getElementById('productImagePreview').src = 'https://placehold.co/150x150/e9ecef/666?text=Product';
+  }
+  overlay.classList.add('open');
 }
 function closeProductModal(){ document.getElementById('productModalOverlay').classList.remove('open'); }
 
@@ -883,12 +873,13 @@ function previewProductImage(e){
   const file = e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = () => { document.getElementById('productImagePreview').src = reader.result; };
+  reader.onload = ev => { document.getElementById('productImagePreview').src = ev.target.result; };
   reader.readAsDataURL(file);
 }
 
 async function saveProduct(e){
   e.preventDefault();
+  const id = document.getElementById('productId').value;
   const payload = {
     name: document.getElementById('productName').value.trim(),
     category: document.getElementById('productCategory').value,
@@ -899,305 +890,246 @@ async function saveProduct(e){
     rating: parseFloat(document.getElementById('productRating').value) || 4.5,
     image: document.getElementById('productImagePreview').src
   };
-  try {
-    if(editingProductId) await Api.updateProduct(editingProductId, payload);
-    else await Api.createProduct(payload);
-    showToast('Product saved','success');
+  try{
+    if(id){ await Api.updateProduct(id, payload); showToast('Product updated!', 'success'); }
+    else { await Api.createProduct(payload); showToast('Product added!', 'success'); }
     closeProductModal();
     await renderAdminProducts();
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
   return false;
 }
 
-async function deleteProductAdmin(id){
+async function deleteProduct(id){
   if(!confirm('Delete this product? This cannot be undone.')) return;
-  try { await Api.deleteProduct(id); showToast('Product deleted','info'); await renderAdminProducts(); }
-  catch(err){ showToast(apiErrorMessage(err),'error'); }
-}
-
-async function renderAdminOrders(){
-  const orders = await Api.getOrders();
-  const tbody = document.querySelector('#adminOrdersTable tbody');
-  if(!orders.length){
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="ei">🧾</div><h3>No orders yet</h3></div></td></tr>`;
-    return;
-  }
-  const statuses = ['Pending','Shipped','Delivered','Cancelled'];
-  tbody.innerHTML = orders.map(r=>`
-    <tr>
-      <td>#${r.order.id}</td>
-      <td>User #${r.order.userId}</td>
-      <td>${escapeHtml(r.orderItem.name)} × ${r.orderItem.quantity}</td>
-      <td>$${(Number(r.orderItem.price)*r.orderItem.quantity).toFixed(2)}</td>
-      <td><span class="status-badge status-${r.order.status.toLowerCase()}">${r.order.status}</span></td>
-      <td>${new Date(r.order.createdAt).toLocaleDateString()}</td>
-      <td>
-        <select onchange="updateAdminOrderStatus(${r.order.id}, this.value)">
-          ${statuses.map(s=>`<option value="${s}" ${s===r.order.status?'selected':''}>${s}</option>`).join('')}
-        </select>
-      </td>
-    </tr>
-  `).join('');
-}
-
-async function updateAdminOrderStatus(orderId, status){
-  try { await Api.updateOrderStatus(orderId, status); showToast('Order status updated','success'); await renderAdminOrders(); }
-  catch(err){ showToast(apiErrorMessage(err),'error'); }
-}
-
-async function renderAdminAnalytics(){
-  const admin = await getCurrentAdmin();
-  const dash = await Api.sellerDashboard(admin.id);
-  drawPerformanceChart(dash.products);
-
-  const tbody = document.querySelector('#performanceTable tbody');
-  tbody.innerHTML = dash.products.length ? dash.products.map(p=>`
-    <tr>
-      <td>${escapeHtml(p.name)}</td>
-      <td>${p.sold||0}</td>
-      <td>${p.stock}</td>
-      <td>$${((p.sold||0)*Number(p.price)).toFixed(2)}</td>
-    </tr>
-  `).join('') : `<tr><td colspan="4"><div class="empty-state"><div class="ei">📈</div><h3>No data yet</h3></div></td></tr>`;
-}
-
-async function renderAdminProfile(){
-  const admin = await getCurrentAdmin();
-  document.getElementById('adminProfilePanel').innerHTML = `
-    <div class="form-row">
-      <div class="form-group"><label>Name</label><input type="text" id="adminProfileName" value="${escapeHtml(admin.name)}"></div>
-      <div class="form-group"><label>Phone</label><input type="text" id="adminProfilePhone" value="${escapeHtml(admin.phone||'')}"></div>
-    </div>
-    <div class="form-group"><label>Email</label><input type="email" value="${escapeHtml(admin.email)}" disabled></div>
-    <div class="form-group"><label>Current Package</label><input type="text" value="${escapeHtml(admin.packageId||'basic')}" disabled></div>
-    <button class="btn btn-primary" onclick="saveAdminProfile()">Save Changes</button>
-    <button class="btn btn-outline" onclick="navigateTo('packages')">Change Package</button>
-  `;
-}
-
-async function saveAdminProfile(){
-  try {
-    await Api.updateProfile({
-      name: document.getElementById('adminProfileName').value.trim(),
-      phone: document.getElementById('adminProfilePhone').value.trim()
-    });
-    invalidateProfileCache();
-    showToast('Profile updated','success');
-    await updateNavbar();
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
+  try{ await Api.deleteProduct(id); showToast('Product deleted', 'info'); await renderAdminProducts(); }
+  catch(err){ showToast(apiErrorMessage(err), 'error'); }
 }
 
 /* =========================================================
    USER DASHBOARD
    ========================================================= */
-async function renderUserDashboard(){
-  const user = await getCurrentUser();
-  if(!user) return;
-
-  document.getElementById('userAvatar').textContent = user.name.charAt(0).toUpperCase();
-  document.getElementById('userSidebarName').textContent = user.name;
-
-  switchUserTab(currentUserTab || 'profile');
-}
-
-function switchUserTab(tab){
+async function switchUserTab(tab){
   currentUserTab = tab;
   document.querySelectorAll('#view-userDashboard .sidebar-link[data-tab]').forEach(a=>a.classList.toggle('active', a.dataset.tab===tab));
   document.querySelectorAll('#view-userDashboard .dash-tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('user-tab-'+tab).classList.add('active');
 
-  if(tab==='profile') renderUserProfile();
-  else if(tab==='address') renderAddressBook();
-  else if(tab==='orders') renderUserOrdersTab();
-  else if(tab==='spending') renderUserSpending();
+  try{
+    if(tab==='profile') await renderUserProfile();
+    else if(tab==='address') await renderUserAddresses();
+    else if(tab==='orders') await renderUserOrdersTab();
+    else if(tab==='spending') await renderUserSpending();
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
+}
+
+async function renderUserDashboard(){
+  const user = await getCurrentUser();
+  if(!user) return;
+  document.getElementById('userSidebarName').textContent = user.name;
+  document.getElementById('userAvatar').textContent = user.name.charAt(0).toUpperCase();
+  await switchUserTab(currentUserTab || 'profile');
 }
 
 async function renderUserProfile(){
   const user = await getCurrentUser();
   document.getElementById('userProfilePanel').innerHTML = `
-    <div class="form-row">
-      <div class="form-group"><label>Name</label><input type="text" id="userProfileName" value="${escapeHtml(user.name)}"></div>
-      <div class="form-group"><label>Phone</label><input type="text" id="userProfilePhone" value="${escapeHtml(user.phone||'')}"></div>
-    </div>
-    <div class="form-group"><label>Email</label><input type="email" value="${escapeHtml(user.email)}" disabled></div>
+    <div class="profile-field"><label>Name</label><input type="text" id="userProfileName" value="${escapeHtml(user.name)}"></div>
+    <div class="profile-field"><label>Email</label><input type="text" value="${escapeHtml(user.email)}" disabled></div>
+    <div class="profile-field"><label>Phone</label><input type="text" id="userProfilePhone" value="${escapeHtml(user.phone||'')}"></div>
     <button class="btn btn-primary" onclick="saveUserProfile()">Save Changes</button>
   `;
-  document.getElementById('userMemberSince').textContent = new Date(user.createdAt).getFullYear();
 }
 
 async function saveUserProfile(){
-  try {
+  try{
     await Api.updateProfile({
       name: document.getElementById('userProfileName').value.trim(),
       phone: document.getElementById('userProfilePhone').value.trim()
     });
     invalidateProfileCache();
-    showToast('Profile updated','success');
-    await updateNavbar();
-  } catch(err){ showToast(apiErrorMessage(err),'error'); }
+    showToast('Profile updated', 'success');
+    await renderUserDashboard();
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
+}
+
+async function renderUserAddresses(){
+  const list = await Api.getAddresses();
+  const grid = document.getElementById('addressGrid');
+  grid.innerHTML = list.length ? list.map(a=>`
+    <div class="address-card ${a.isDefault?'default':''}">
+      ${a.isDefault?'<span class="default-badge">Default</span>':''}
+      <div class="addr-label">${escapeHtml(a.label||'Address')}</div>
+      <div class="addr-text">${escapeHtml(a.fullAddress)}, ${escapeHtml(a.city)}</div>
+      <div class="addr-phone">${escapeHtml(a.phone||'')}</div>
+      <div class="addr-actions">
+        <button class="btn-link" onclick='openAddressModal(${JSON.stringify(a)})'>Edit</button>
+        <button class="btn-link danger" onclick="deleteAddress(${a.id})">Delete</button>
+      </div>
+    </div>
+  `).join('') : `<div class="empty-state"><div class="ei">📍</div><h3>No addresses saved</h3></div>`;
 }
 
 async function renderUserOrdersTab(){
-  const ordersList = await Api.getOrders();
+  const orders = await Api.getOrders();
   const tbody = document.querySelector('#userOrdersTable tbody');
-  if(!ordersList.length){
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="ei">📦</div><h3>No orders yet</h3></div></td></tr>`;
-    return;
-  }
-  tbody.innerHTML = ordersList.map(o=>`
-    <tr>
+  if(!orders.length){ tbody.innerHTML = `<tr><td colspan="5">No orders yet</td></tr>`; return; }
+  const rows = await Promise.all(orders.map(async o=>{
+    const full = await Api.getOrder(o.id);
+    return `<tr>
       <td>#${o.id}</td>
-      <td>-</td>
+      <td>${full.items.length} item(s)</td>
       <td>$${Number(o.total).toFixed(2)}</td>
       <td><span class="status-badge status-${o.status.toLowerCase()}">${o.status}</span></td>
       <td>${new Date(o.createdAt).toLocaleDateString()}</td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }));
+  tbody.innerHTML = rows.join('');
 }
 
 async function renderUserSpending(){
-  const user = await getCurrentUser();
-  const ordersList = await Api.getOrders();
-  const total = ordersList.reduce((s,o)=>s+Number(o.total),0);
+  const [orders, user] = await Promise.all([Api.getOrders(), getCurrentUser()]);
+  const total = orders.reduce((s,o)=>s+Number(o.total),0);
   document.getElementById('userTotalSpending').textContent = `$${total.toFixed(2)}`;
-  document.getElementById('userTotalOrders').textContent = ordersList.length;
-  document.getElementById('userMemberSince').textContent = new Date(user.createdAt).getFullYear();
-  drawSpendingChart(ordersList);
+  document.getElementById('userTotalOrders').textContent = orders.length;
+  document.getElementById('userMemberSince').textContent = user ? new Date(user.createdAt).toLocaleDateString(undefined,{month:'short',year:'numeric'}) : '-';
+  drawSpendingChart(orders);
 }
 
 /* =========================================================
-   CANVAS CHARTS (lightweight, no external chart library)
+   ADDRESS MODAL
    ========================================================= */
-function setupCanvas(id){
-  const canvas = document.getElementById(id);
-  if(!canvas) return null;
-  const dpr = window.devicePixelRatio || 1;
-  const rect = canvas.getBoundingClientRect();
-  const width = rect.width || canvas.parentElement.clientWidth || 400;
-  const height = canvas.height || 220;
-  canvas.width = width*dpr;
-  canvas.height = height*dpr;
-  canvas.style.width = width+'px';
-  canvas.style.height = height+'px';
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0,0,width,height);
-  return { ctx, width, height };
+let editingAddressId = null;
+function openAddressModal(addr){
+  editingAddressId = addr ? addr.id : null;
+  document.getElementById('addressForm').reset();
+  if(addr){
+    document.getElementById('addrLabel').value = addr.label || '';
+    document.getElementById('addrFull').value = addr.fullAddress;
+    document.getElementById('addrCity').value = addr.city;
+    document.getElementById('addrPhone').value = addr.phone || '';
+  }
+  document.getElementById('addressModalOverlay').classList.add('open');
+}
+function closeAddressModal(){ document.getElementById('addressModalOverlay').classList.remove('open'); }
+
+async function saveAddress(e){
+  e.preventDefault();
+  const payload = {
+    label: document.getElementById('addrLabel').value.trim(),
+    fullAddress: document.getElementById('addrFull').value.trim(),
+    city: document.getElementById('addrCity').value.trim(),
+    phone: document.getElementById('addrPhone').value.trim()
+  };
+  try{
+    if(editingAddressId) await Api.updateAddress(editingAddressId, payload);
+    else await Api.createAddress(payload);
+    showToast('Address saved!', 'success');
+    closeAddressModal();
+    await renderUserAddresses();
+  } catch(err){ showToast(apiErrorMessage(err), 'error'); }
+  return false;
 }
 
-function drawBarChart(canvasId, labels, values, color='#6C5CE7'){
-  const setup = setupCanvas(canvasId);
-  if(!setup) return;
-  const { ctx, width, height } = setup;
-  const padding = 30;
-  const max = Math.max(1, ...values);
-  const barW = (width - padding*2) / (labels.length || 1) * 0.6;
-  const gap = (width - padding*2) / (labels.length || 1);
+async function deleteAddress(id){
+  if(!confirm('Delete this address?')) return;
+  try{ await Api.deleteAddress(id); showToast('Address deleted', 'info'); await renderUserAddresses(); }
+  catch(err){ showToast(apiErrorMessage(err), 'error'); }
+}
 
-  ctx.strokeStyle = '#e9ecef';
-  ctx.beginPath(); ctx.moveTo(padding, height-padding); ctx.lineTo(width-10, height-padding); ctx.stroke();
+/* =========================================================
+   LIGHTWEIGHT CANVAS CHARTS (no external chart library)
+   ========================================================= */
+function setupCanvas(canvas){
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = (canvas.height || 220) * dpr;
+  ctx.scale(dpr, dpr);
+  return ctx;
+}
+
+function drawBarChart(canvasId, labels, values, color = '#6C5CE7'){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = setupCanvas(canvas);
+  const W = canvas.getBoundingClientRect().width, H = canvas.height / (window.devicePixelRatio||1);
+  ctx.clearRect(0,0,W,H);
+  if(!values.length){ ctx.fillStyle = '#999'; ctx.fillText('No data yet', W/2-30, H/2); return; }
+
+  const max = Math.max(...values, 1);
+  const padding = 30, barGap = 12;
+  const barW = (W - padding*2) / values.length - barGap;
 
   values.forEach((v,i)=>{
-    const barH = ((height-padding*2) * v) / max;
-    const x = padding + i*gap + (gap-barW)/2;
-    const y = height - padding - barH;
+    const barH = (v/max) * (H - 50);
+    const x = padding + i*(barW+barGap);
+    const y = H - 30 - barH;
     ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.roundRect ? ctx.roundRect(x,y,barW,barH,4) : ctx.rect(x,y,barW,barH);
-    ctx.fill();
-
-    ctx.fillStyle = '#495057';
-    ctx.font = '11px sans-serif';
+    ctx.fillRect(x, y, barW, barH);
+    ctx.fillStyle = '#333';
+    ctx.font = '11px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(String(labels[i]).slice(0,8), x+barW/2, height-padding+14);
+    ctx.fillText(String(labels[i]).slice(0,8), x+barW/2, H-12);
+    ctx.fillText(v.toFixed(v<10?1:0), x+barW/2, y-6);
   });
 }
 
 function drawPieChart(canvasId, labels, values){
-  const setup = setupCanvas(canvasId);
-  if(!setup) return;
-  const { ctx, width, height } = setup;
-  const total = values.reduce((s,v)=>s+v,0);
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  const ctx = setupCanvas(canvas);
+  const W = canvas.getBoundingClientRect().width, H = canvas.height / (window.devicePixelRatio||1);
+  ctx.clearRect(0,0,W,H);
+  const total = values.reduce((a,b)=>a+b,0);
+  if(!total){ ctx.fillStyle = '#999'; ctx.fillText('No data yet', W/2-30, H/2); return; }
+
   const colors = ['#6C5CE7','#00B894','#FDCB6E','#E17055','#0984E3','#D63031','#00CEC9'];
-  const cx = width/2 - 40, cy = height/2, r = Math.min(cy,cx)-10;
-
-  if(total === 0){
-    ctx.fillStyle = '#adb5bd'; ctx.font = '13px sans-serif'; ctx.textAlign='center';
-    ctx.fillText('No data yet', width/2, height/2);
-    return;
-  }
-
+  const cx = 80, cy = H/2, r = 60;
   let start = -Math.PI/2;
   values.forEach((v,i)=>{
-    const slice = (v/total) * Math.PI*2;
-    ctx.fillStyle = colors[i % colors.length];
-    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,start,start+slice); ctx.closePath(); ctx.fill();
-    start += slice;
+    const angle = (v/total) * Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,start,start+angle);
+    ctx.closePath();
+    ctx.fillStyle = colors[i%colors.length];
+    ctx.fill();
+    start += angle;
   });
 
+  let legendY = 20;
   labels.forEach((l,i)=>{
-    ctx.fillStyle = colors[i % colors.length];
-    ctx.fillRect(width-90, 14+i*18, 10, 10);
-    ctx.fillStyle = '#495057'; ctx.font='11px sans-serif'; ctx.textAlign='left';
-    ctx.fillText(String(l).slice(0,12), width-75, 23+i*18);
+    ctx.fillStyle = colors[i%colors.length];
+    ctx.fillRect(170, legendY, 12, 12);
+    ctx.fillStyle = '#333';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${l} (${values[i]})`, 188, legendY+11);
+    legendY += 20;
   });
 }
 
-function drawLineChart(canvasId, labels, values, color='#00B894'){
-  const setup = setupCanvas(canvasId);
-  if(!setup) return;
-  const { ctx, width, height } = setup;
-  const padding = 30;
-  const max = Math.max(1, ...values);
-  const stepX = (width - padding*2) / Math.max(1, labels.length-1);
-
-  ctx.strokeStyle = '#e9ecef';
-  ctx.beginPath(); ctx.moveTo(padding, height-padding); ctx.lineTo(width-10, height-padding); ctx.stroke();
-
-  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
-  values.forEach((v,i)=>{
-    const x = padding + i*stepX;
-    const y = height - padding - ((height-padding*2)*v)/max;
-    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
-  });
-  ctx.stroke();
-
-  ctx.fillStyle = color;
-  values.forEach((v,i)=>{
-    const x = padding + i*stepX;
-    const y = height - padding - ((height-padding*2)*v)/max;
-    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
-  });
+function drawSalesChart(products){
+  const top = [...products].sort((a,b)=>(b.sold||0)-(a.sold||0)).slice(0,6);
+  drawBarChart('salesChart', top.map(p=>p.name), top.map(p=>p.sold||0), '#6C5CE7');
 }
-
-function drawSalesChart(orderRows){
-  const byDay = {};
-  orderRows.forEach(r=>{
-    const day = new Date(r.order.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric'});
-    byDay[day] = (byDay[day]||0) + Number(r.orderItem.price)*r.orderItem.quantity;
-  });
-  const labels = Object.keys(byDay).slice(-7);
-  drawBarChart('salesChart', labels.length?labels:['No data'], labels.length?labels.map(l=>byDay[l]):[0]);
-}
-
 function drawCategoryChart(products){
   const byCat = {};
-  products.forEach(p=>{ const c = p.category || 'Uncategorized'; byCat[c] = (byCat[c]||0) + (p.sold||0); });
-  const labels = Object.keys(byCat);
-  drawPieChart('categoryChart', labels.length?labels:['No sales yet'], labels.length?labels.map(l=>byCat[l]):[1]);
+  products.forEach(p=>{ const c = p.category || 'Other'; byCat[c] = (byCat[c]||0) + (p.sold||0); });
+  const labels = Object.keys(byCat), values = Object.values(byCat);
+  drawPieChart('categoryChart', labels, values);
 }
-
 function drawPerformanceChart(products){
-  const top = [...products].sort((a,b)=>(b.sold||0)-(a.sold||0)).slice(0,8);
-  drawBarChart('performanceChart', top.map(p=>p.name), top.map(p=>p.sold||0), '#0984E3');
+  const top = [...products].sort((a,b)=>((b.sold||0)*Number(b.price))-((a.sold||0)*Number(a.price))).slice(0,8);
+  drawBarChart('performanceChart', top.map(p=>p.name), top.map(p=>(p.sold||0)*Number(p.price)), '#00B894');
 }
-
-function drawSpendingChart(ordersList){
+function drawSpendingChart(orders){
   const byMonth = {};
-  ordersList.forEach(o=>{
-    const m = new Date(o.createdAt).toLocaleDateString('en-US',{month:'short'});
-    byMonth[m] = (byMonth[m]||0) + Number(o.total);
+  orders.forEach(o=>{
+    const d = new Date(o.createdAt);
+    const key = d.toLocaleDateString(undefined,{month:'short'});
+    byMonth[key] = (byMonth[key]||0) + Number(o.total);
   });
-  const labels = Object.keys(byMonth);
-  drawLineChart('spendingChart', labels.length?labels:['No data'], labels.length?labels.map(l=>byMonth[l]):[0]);
+  drawBarChart('spendingChart', Object.keys(byMonth), Object.values(byMonth), '#0984E3');
 }
