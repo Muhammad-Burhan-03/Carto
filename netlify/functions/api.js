@@ -123,6 +123,26 @@ router.get('/sellers/:id', h(async (req, res) => {
   res.json(publicProfile);
 }));
 
+router.put('/sellers/me/package', requireRole('seller'), h(async (req, res) => {
+  const { packageId } = req.body;
+  const [pkg] = await db.select().from(packages).where(eq(packages.id, String(packageId)));
+  if (!pkg) return res.status(400).json({ error: 'Invalid package id' });
+
+  const [updated] = await db.update(sellers).set({
+    packageId: pkg.id, packageActive: true, packagePurchasedAt: new Date()
+  }).where(eq(sellers.id, req.auth.id)).returning();
+
+  const { passwordHash, ...safe } = updated;
+  res.json(safe);
+}));
+
+router.put('/sellers/me/store', requireRole('seller'), h(async (req, res) => {
+  const { storeName, storeDescription, storeLogo } = req.body;
+  const [updated] = await db.update(sellers).set({ storeName, storeDescription, storeLogo }).where(eq(sellers.id, req.auth.id)).returning();
+  const { passwordHash, ...safe } = updated;
+  res.json(safe);
+}));
+
 router.get('/sellers/:id/dashboard', requireRole('seller'), h(async (req, res) => {
   const sellerId = Number(req.params.id);
   if (req.auth.id !== sellerId) return res.status(403).json({ error: 'Forbidden' });
@@ -175,7 +195,12 @@ router.get('/products', h(async (req, res) => {
   if (minPrice) conditions.push(gte(products.price, String(minPrice)));
   if (maxPrice) conditions.push(lte(products.price, String(maxPrice)));
 
-  let query = db.select().from(products);
+  let query = db.select({
+    id: products.id, sellerId: products.sellerId, categoryId: products.categoryId, brandId: products.brandId,
+    name: products.name, description: products.description, price: products.price, discount: products.discount,
+    stock: products.stock, sold: products.sold, rating: products.rating, image: products.image, createdAt: products.createdAt,
+    category: categories.name, categorySlug: categories.slug
+  }).from(products).leftJoin(categories, eq(products.categoryId, categories.id));
   if (conditions.length) query = query.where(and(...conditions));
 
   const sortMap = {
@@ -196,8 +221,11 @@ router.get('/products', h(async (req, res) => {
 }));
 
 router.get('/products/:id', h(async (req, res) => {
-  const [product] = await db.select().from(products).where(eq(products.id, Number(req.params.id)));
-  if (!product) return res.status(404).json({ error: 'Product not found' });
+  const [row] = await db.select({
+    product: products, categoryName: categories.name, categorySlug: categories.slug
+  }).from(products).leftJoin(categories, eq(products.categoryId, categories.id)).where(eq(products.id, Number(req.params.id)));
+  if (!row) return res.status(404).json({ error: 'Product not found' });
+  const product = { ...row.product, category: row.categoryName, categorySlug: row.categorySlug };
 
   const images = await db.select().from(productImages).where(eq(productImages.productId, product.id));
   const relatedProducts = product.categoryId
@@ -217,7 +245,14 @@ router.post('/products', requireRole('seller'), validate('product'), h(async (re
       return res.status(403).json({ error: `Product limit reached for your ${pkg.name} plan (${pkg.maxProducts} max)` });
     }
   }
-  const [product] = await db.insert(products).values({ ...req.validated, sellerId: req.auth.id }).returning();
+  const { category, ...rest } = req.validated;
+  let categoryId;
+  if (category) {
+    const slug = category.toLowerCase();
+    const [cat] = await db.select().from(categories).where(or(eq(categories.slug, slug), eq(categories.name, category)));
+    categoryId = cat?.id;
+  }
+  const [product] = await db.insert(products).values({ ...rest, categoryId, sellerId: req.auth.id }).returning();
   res.status(201).json(product);
 }));
 
@@ -226,7 +261,14 @@ router.put('/products/:id', requireRole('seller'), validate('product'), h(async 
   if (!existing) return res.status(404).json({ error: 'Product not found' });
   if (existing.sellerId !== req.auth.id) return res.status(403).json({ error: 'Forbidden' });
 
-  const [updated] = await db.update(products).set(req.validated).where(eq(products.id, existing.id)).returning();
+  const { category, ...rest } = req.validated;
+  let categoryId = existing.categoryId;
+  if (category) {
+    const slug = category.toLowerCase();
+    const [cat] = await db.select().from(categories).where(or(eq(categories.slug, slug), eq(categories.name, category)));
+    categoryId = cat?.id ?? categoryId;
+  }
+  const [updated] = await db.update(products).set({ ...rest, categoryId }).where(eq(products.id, existing.id)).returning();
   res.json(updated);
 }));
 

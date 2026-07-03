@@ -15,7 +15,7 @@ export const schemas = {
     packageId: z.enum(['basic', 'standard', 'premium']),
     storeName: z.string().min(2).max(150),
     storeDescription: z.string().max(2000).optional(),
-    storeLogo: z.string().url().optional()
+    storeLogo: z.string().min(10).optional()
   }),
   login: z.object({
     email: z.string().email(),
@@ -38,8 +38,9 @@ export const schemas = {
     price: z.number().positive(),
     discount: z.number().min(0).max(100).optional(),
     stock: z.number().int().min(0),
-    image: z.string().url().optional(),
-    categoryId: z.number().int().optional(),
+    rating: z.number().min(0).max(5).optional(),
+    image: z.string().min(10).optional(),
+    category: z.string().max(80).optional(),
     brandId: z.number().int().optional()
   }),
   cartItem: z.object({
