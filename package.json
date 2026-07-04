@@ -11,6 +11,7 @@
     "build": "echo 'Static site, no build step required'"
   },
   "dependencies": {
+    "@netlify/database": "^1.0.0",
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-orm": "^0.36.4",
     "bcryptjs": "^2.4.3",
