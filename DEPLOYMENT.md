@@ -66,3 +66,16 @@ This serves the static site and runs the Netlify Functions locally at
   production deployment you'd swap this for uploads to object storage and
   store just the URL — that's a follow-up, not something achievable without
   additional third-party credentials.
+
+## Verifying your deployment
+
+Once deployed with `DATABASE_URL` set, hit:
+
+```
+GET https://<your-site>.netlify.app/api/health
+```
+
+- `{"status":"ok","database":"connected", ...}` → the function is live and can reach Neon.
+- `{"status":"error","database":"unreachable", ...}` → check that `DATABASE_URL` is set correctly in Netlify's environment variables and that migrations have been run.
+
+This is the fastest way to confirm the backend is wired up correctly before testing the full UI flow (register → browse → cart → checkout).

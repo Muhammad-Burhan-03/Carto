@@ -166,6 +166,18 @@ router.get('/sellers/:id/dashboard', requireRole('seller'), h(async (req, res) =
 }));
 
 /* =========================================================
+   HEALTH CHECK
+   ========================================================= */
+router.get('/health', async (req, res) => {
+  try {
+    await db.select().from(packages).limit(1);
+    res.json({ status: 'ok', database: 'connected', time: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({ status: 'error', database: 'unreachable', message: err.message });
+  }
+});
+
+/* =========================================================
    CATEGORIES / BRANDS
    ========================================================= */
 router.get('/categories', h(async (req, res) => {

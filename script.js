@@ -344,8 +344,12 @@ function escapeHtml(str){
    SEARCH
    ========================================================= */
 function performSearch(){
+  const navCat = document.getElementById('categoryFilterNav').value;
   navigateTo('products');
-  setTimeout(()=>{ applyFilters(); }, 50);
+  setTimeout(()=>{
+    if(navCat !== 'all') document.getElementById('filterCategory').value = navCat;
+    applyFilters();
+  }, 50);
 }
 
 /* =========================================================
