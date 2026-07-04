@@ -1,23 +1,23 @@
 {
   "name": "carto",
   "version": "1.0.0",
-  "description": "Carto - Full-stack e-commerce marketplace (Netlify Functions + Neon PostgreSQL + Drizzle ORM)",
+  "description": "Carto - Full-stack e-commerce marketplace (Vercel Serverless Functions + Neon PostgreSQL + Drizzle ORM)",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "dev": "netlify dev",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node db/migrate.js",
-    "build": "echo 'Static site, no build step required'"
+    "build": "echo 'Static frontend + Vercel serverless functions, no build step required'"
   },
   "dependencies": {
-    "@netlify/database": "^1.0.0",
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-orm": "^0.36.4",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
     "express": "^4.21.1",
-    "serverless-http": "^3.2.0",
     "cors": "^2.8.5",
     "zod": "^3.23.8"
   },

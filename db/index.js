@@ -7,24 +7,19 @@ import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import * as schema from './schema.js';
 
-// On Netlify, @netlify/database auto-provisions a Postgres instance (Neon
-// under the hood) and injects its connection string automatically — no
-// manual setup required. We fall back to a manually-configured DATABASE_URL
-// for local development or if you'd rather point at your own Postgres/Neon
-// instance instead of Netlify Database.
-let connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  try {
-    const { getConnectionString } = await import('@netlify/database');
-    connectionString = getConnectionString();
-  } catch { /* @netlify/database not available in this environment */ }
-}
+// Support DATABASE_URL directly (manual Neon setup) as well as the
+// variable names Vercel's Neon marketplace integration injects
+// automatically when you connect a database via the Storage tab.
+const connectionString =
+  process.env.DATABASE_URL ||
+  process.env.POSTGRES_URL ||
+  process.env.DATABASE_URL_UNPOOLED;
 
 if (!connectionString) {
   throw new Error(
-    'No database connection string available. On Netlify, install/deploy with ' +
-    '@netlify/database for automatic provisioning, or set DATABASE_URL manually ' +
-    'in your environment variables.'
+    'No database connection string found. Set DATABASE_URL in your ' +
+    'Vercel project environment variables (Settings -> Environment Variables), ' +
+    'or connect a Neon database via the Storage tab.'
   );
 }
 

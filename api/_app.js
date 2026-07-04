@@ -1,23 +1,22 @@
 /* =========================================================
-   CARTO - Consolidated Netlify Function API
-   All /api/* routes are handled by this single Express app,
-   wrapped with serverless-http. This keeps deployment simple
-   (one Lambda, one cold start) while still exposing a full
-   REST API surface.
+   CARTO - Backend API (Express)
+   Deployed on Vercel as a serverless function (see
+   api/[...slug].js), but this file itself is plain Express
+   with zero platform-specific code — it exports the app
+   directly so it's portable to any Express-compatible host.
    ========================================================= */
 import express from 'express';
 import cors from 'cors';
-import serverless from 'serverless-http';
 import { eq, and, desc, asc, sql as rawSql, ilike, gte, lte, or } from 'drizzle-orm';
 
-import { db } from '../../db/index.js';
+import { db } from '../db/index.js';
 import {
   users, sellers, packages, categories, brands, products, productImages,
   carts, cartItems, wishlists, wishlistItems, addresses, orders, orderItems,
   payments, reviews, contactMessages, newsletterSubscribers, notifications
-} from '../../db/schema.js';
-import { hashPassword, verifyPassword, signToken, requireAuth, requireRole, optionalAuth } from './lib/auth.js';
-import { validate } from './lib/validation.js';
+} from '../db/schema.js';
+import { hashPassword, verifyPassword, signToken, requireAuth, requireRole, optionalAuth } from '../lib/auth.js';
+import { validate } from '../lib/validation.js';
 
 const app = express();
 app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*' }));
@@ -570,10 +569,10 @@ router.get('/packages', h(async (req, res) => {
    ========================================================= */
 app.use('/api', router);
 
-app.use((req, res) => res.status(404).json({ error: 'Not found' }));
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
-export const handler = serverless(app);
+export default app;
