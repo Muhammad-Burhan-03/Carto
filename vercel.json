@@ -6,6 +6,9 @@
       "maxDuration": 10
     }
   },
+  "rewrites": [
+    { "source": "/api/:match*", "destination": "/api/[...slug]" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
