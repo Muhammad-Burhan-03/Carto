@@ -46,7 +46,9 @@ const Api = {
     if (text) { try { data = JSON.parse(text); } catch { /* non-JSON response */ } }
 
     if (!res.ok) {
-      const message = (data && (data.error || (data.details && data.details.map(d => d.message).join(', ')))) || `Request failed (${res.status})`;
+      const message = (data && (
+        (data.details && data.details.map(d => d.message).join(', ')) || data.error
+      )) || `Request failed (${res.status})`;
       const err = new Error(message);
       err.status = res.status;
       err.data = data;
