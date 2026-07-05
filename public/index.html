@@ -118,6 +118,10 @@
             <label>Password</label>
             <input type="password" id="userLoginPassword" required placeholder="••••••••">
           </div>
+          <div class="form-group form-group-inline">
+            <label class="checkbox-label"><input type="checkbox" id="userLoginRemember"> Remember me</label>
+            <a href="#" class="auth-forgot-link" onclick="openForgotPassword('user')">Forgot password?</a>
+          </div>
           <button type="submit" class="btn btn-primary btn-full">Login</button>
           <p class="auth-switch">Don't have an account? <a href="#" onclick="navigateTo('userRegister')">Register</a></p>
           <p class="auth-switch">Are you a seller? <a href="#" onclick="navigateTo('adminLogin')">Admin Login</a></p>
@@ -151,7 +155,8 @@
           </div>
           <div class="form-group">
             <label>Password</label>
-            <input type="password" id="regPassword" required placeholder="••••••••" minlength="4">
+            <input type="password" id="regPassword" required placeholder="••••••••" minlength="8">
+            <small class="field-hint">At least 8 characters, with uppercase, lowercase &amp; a number</small>
           </div>
           <button type="submit" class="btn btn-primary btn-full">Create Account</button>
           <p class="auth-switch">Already have an account? <a href="#" onclick="navigateTo('userLogin')">Login</a></p>
@@ -177,6 +182,10 @@
           <div class="form-group">
             <label>Password</label>
             <input type="password" id="adminLoginPassword" required placeholder="••••••••">
+          </div>
+          <div class="form-group form-group-inline">
+            <label class="checkbox-label"><input type="checkbox" id="adminLoginRemember"> Remember me</label>
+            <a href="#" class="auth-forgot-link" onclick="openForgotPassword('seller')">Forgot password?</a>
           </div>
           <button type="submit" class="btn btn-dark btn-full">Login</button>
           <p class="auth-switch">New seller? <a href="#" onclick="navigateTo('adminRegister')">Register your store</a></p>
@@ -211,10 +220,93 @@
           </div>
           <div class="form-group">
             <label>Password</label>
-            <input type="password" id="adminRegPassword" required placeholder="••••••••" minlength="4">
+            <input type="password" id="adminRegPassword" required placeholder="••••••••" minlength="8">
+            <small class="field-hint">At least 8 characters, with uppercase, lowercase &amp; a number</small>
           </div>
           <button type="submit" class="btn btn-dark btn-full">Register</button>
           <p class="auth-switch">Already registered? <a href="#" onclick="navigateTo('adminLogin')">Login</a></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EMAIL OTP VERIFICATION ============ -->
+  <section id="view-otpVerify" class="view auth-view">
+    <div class="auth-card">
+      <div class="auth-side">
+        <h2>Verify Your Email ✉️</h2>
+        <p>We've sent a 6-digit code to your email address. Enter it below to activate your account.</p>
+      </div>
+      <div class="auth-form-box">
+        <h3>Enter Verification Code</h3>
+        <p class="otp-target-email" id="otpTargetEmail"></p>
+        <form id="otpVerifyForm" onsubmit="return handleOtpVerify(event)">
+          <div class="otp-input-row" id="otpInputRow">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" data-idx="0">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" data-idx="1">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" data-idx="2">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" data-idx="3">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" data-idx="4">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" data-idx="5">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" id="otpVerifyBtn">Verify Email</button>
+          <p class="auth-switch otp-resend-row">
+            Didn't get the code?
+            <a href="#" id="otpResendLink" onclick="handleResendOtp(event)">Resend code</a>
+            <span id="otpResendCountdown"></span>
+          </p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FORGOT PASSWORD (request code) ============ -->
+  <section id="view-forgotPassword" class="view auth-view">
+    <div class="auth-card">
+      <div class="auth-side">
+        <h2>Forgot Password? 🔑</h2>
+        <p>No worries. Enter your email and we'll send you a code to reset it.</p>
+      </div>
+      <div class="auth-form-box">
+        <h3>Reset Your Password</h3>
+        <form id="forgotPasswordForm" onsubmit="return handleForgotPassword(event)">
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="forgotEmail" required placeholder="you@example.com">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" id="forgotPasswordBtn">Send Reset Code</button>
+          <p class="auth-switch"><a href="#" onclick="navigateTo('userLogin')">Back to Login</a></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RESET PASSWORD (enter code + new password) ============ -->
+  <section id="view-resetPassword" class="view auth-view">
+    <div class="auth-card">
+      <div class="auth-side">
+        <h2>Almost There 🔒</h2>
+        <p>Enter the code we emailed you along with your new password.</p>
+      </div>
+      <div class="auth-form-box">
+        <h3>Set New Password</h3>
+        <p class="otp-target-email" id="resetTargetEmail"></p>
+        <form id="resetPasswordForm" onsubmit="return handleResetPassword(event)">
+          <div class="otp-input-row" id="resetOtpInputRow">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit reset-otp-digit" data-idx="0">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit reset-otp-digit" data-idx="1">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit reset-otp-digit" data-idx="2">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit reset-otp-digit" data-idx="3">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit reset-otp-digit" data-idx="4">
+            <input type="text" inputmode="numeric" maxlength="1" class="otp-digit reset-otp-digit" data-idx="5">
+          </div>
+          <div class="form-group">
+            <label>New Password</label>
+            <input type="password" id="resetNewPassword" required placeholder="••••••••" minlength="8">
+            <small class="field-hint">At least 8 characters, with uppercase, lowercase &amp; a number</small>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" id="resetPasswordBtn">Reset Password</button>
+          <p class="auth-switch"><a href="#" onclick="navigateTo('userLogin')">Back to Login</a></p>
         </form>
       </div>
     </div>

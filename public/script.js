@@ -37,14 +37,14 @@ async function getCurrentAdmin() {
 function invalidateProfileCache() { currentUserCache = null; currentAdminCache = null; }
 
 /* ---------- TOAST ---------- */
-function showToast(msg, type = 'info') {
+function showToast(msg, type = 'info', duration = 3000) {
   const container = document.getElementById('toastContainer');
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
   const icons = { success: '✅', error: '❌', info: 'ℹ️' };
   toast.innerHTML = `<span>${icons[type] || ''}</span><span>${escapeHtml(msg)}</span>`;
   container.appendChild(toast);
-  setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(120%)'; setTimeout(() => toast.remove(), 300); }, 3000);
+  setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(120%)'; setTimeout(() => toast.remove(), 300); }, duration);
 }
 function apiErrorMessage(err) { return (err && err.message) ? err.message : 'Something went wrong. Please try again.'; }
 
@@ -175,13 +175,23 @@ async function handleUserLogin(e) {
   e.preventDefault();
   const email = document.getElementById('userLoginEmail').value.trim().toLowerCase();
   const password = document.getElementById('userLoginPassword').value;
+  const rememberMe = document.getElementById('userLoginRemember').checked;
+  const btn = e.target.querySelector('button[type="submit"]');
+  setBtnLoading(btn, true, 'Logging in...');
   try {
-    const { token, user } = await Api.loginUser({ email, password });
+    const { token, user } = await Api.loginUser({ email, password, rememberMe });
     Api.setSession(token, 'user');
     invalidateProfileCache();
     showToast(`Welcome back, ${user.name.split(' ')[0]}!`, 'success');
     navigateTo('home');
-  } catch (err) { showToast(apiErrorMessage(err), 'error'); }
+  } catch (err) {
+    if (err.data?.requiresVerification) {
+      showToast('Please verify your email first.', 'info');
+      openOtpVerify(err.data.email, err.data.role);
+    } else {
+      showToast(apiErrorMessage(err), 'error');
+    }
+  } finally { setBtnLoading(btn, false); }
   return false;
 }
 
@@ -191,13 +201,15 @@ async function handleUserRegister(e) {
   const email = document.getElementById('regEmail').value.trim().toLowerCase();
   const phone = document.getElementById('regPhone').value.trim();
   const password = document.getElementById('regPassword').value;
+  const btn = e.target.querySelector('button[type="submit"]');
+  setBtnLoading(btn, true, 'Creating account...');
   try {
-    const { token, user } = await Api.registerUser({ name, email, phone, password });
-    Api.setSession(token, 'user');
-    invalidateProfileCache();
-    showToast('Account created successfully!', 'success');
-    navigateTo('home');
+    const result = await Api.registerUser({ name, email, phone, password });
+    showToast(result.message || 'Account created! Check your email for a code.', 'success');
+    if (result.devOtp) showToast(`Testing mode - your code is: ${result.devOtp}`, 'info', 20000);
+    openOtpVerify(result.email, result.role);
   } catch (err) { showToast(apiErrorMessage(err), 'error'); }
+  finally { setBtnLoading(btn, false); }
   return false;
 }
 
@@ -205,13 +217,23 @@ async function handleAdminLogin(e) {
   e.preventDefault();
   const email = document.getElementById('adminLoginEmail').value.trim().toLowerCase();
   const password = document.getElementById('adminLoginPassword').value;
+  const rememberMe = document.getElementById('adminLoginRemember').checked;
+  const btn = e.target.querySelector('button[type="submit"]');
+  setBtnLoading(btn, true, 'Logging in...');
   try {
-    const { token, seller } = await Api.loginSeller({ email, password });
+    const { token, seller } = await Api.loginSeller({ email, password, rememberMe });
     Api.setSession(token, 'seller');
     invalidateProfileCache();
     showToast(`Welcome back, ${seller.name.split(' ')[0]}!`, 'success');
     if (!seller.packageActive) navigateTo('packages'); else navigateTo('adminDashboard');
-  } catch (err) { showToast(apiErrorMessage(err), 'error'); }
+  } catch (err) {
+    if (err.data?.requiresVerification) {
+      showToast('Please verify your email first.', 'info');
+      openOtpVerify(err.data.email, err.data.role);
+    } else {
+      showToast(apiErrorMessage(err), 'error');
+    }
+  } finally { setBtnLoading(btn, false); }
   return false;
 }
 
@@ -221,18 +243,172 @@ async function handleAdminRegister(e) {
   const email = document.getElementById('adminRegEmail').value.trim().toLowerCase();
   const phone = document.getElementById('adminRegPhone').value.trim();
   const password = document.getElementById('adminRegPassword').value;
+  const btn = e.target.querySelector('button[type="submit"]');
+  setBtnLoading(btn, true, 'Creating account...');
   try {
     // Every seller needs a package row to satisfy the FK, so default to
-    // Basic at signup; they immediately land on the Packages page to
-    // confirm or upgrade their plan.
-    const { token, seller } = await Api.registerSeller({
+    // Basic at signup; they choose/confirm their real plan after verifying
+    // their email and landing on the Packages page.
+    const result = await Api.registerSeller({
       name, email, phone, password, packageId: 'basic', storeName: `${name}'s Store`
     });
-    Api.setSession(token, 'seller');
-    invalidateProfileCache();
-    showToast('Seller account created! Choose a package to activate.', 'success');
-    navigateTo('packages');
+    showToast(result.message || 'Account created! Check your email for a code.', 'success');
+    if (result.devOtp) showToast(`Testing mode - your code is: ${result.devOtp}`, 'info', 20000);
+    openOtpVerify(result.email, result.role);
   } catch (err) { showToast(apiErrorMessage(err), 'error'); }
+  finally { setBtnLoading(btn, false); }
+  return false;
+}
+
+/* =========================================================
+   BUTTON LOADING STATE HELPER
+   ========================================================= */
+function setBtnLoading(btn, loading, loadingText) {
+  if (!btn) return;
+  if (loading) {
+    btn.dataset.originalText = btn.textContent;
+    btn.textContent = loadingText || 'Please wait...';
+    btn.disabled = true;
+  } else {
+    btn.textContent = btn.dataset.originalText || btn.textContent;
+    btn.disabled = false;
+  }
+}
+
+/* =========================================================
+   EMAIL OTP VERIFICATION
+   ========================================================= */
+let otpContext = { email: null, role: null, postLoginRedirect: 'home' };
+let otpResendTimer = null;
+
+function openOtpVerify(email, role, postLoginRedirect) {
+  otpContext = { email, role, postLoginRedirect: postLoginRedirect || (role === 'seller' ? 'packages' : 'home') };
+  document.getElementById('otpTargetEmail').textContent = email;
+  navigateTo('otpVerify');
+  setTimeout(() => setupOtpInputs('otpInputRow'), 50);
+  startOtpResendCountdown();
+}
+
+function setupOtpInputs(rowId) {
+  const row = document.getElementById(rowId);
+  const inputs = [...row.querySelectorAll('.otp-digit')];
+  inputs.forEach(inp => { inp.value = ''; });
+  inputs[0]?.focus();
+
+  inputs.forEach((input, idx) => {
+    input.oninput = () => {
+      input.value = input.value.replace(/\D/g, '').slice(0, 1);
+      if (input.value && idx < inputs.length - 1) inputs[idx + 1].focus();
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Backspace' && !input.value && idx > 0) inputs[idx - 1].focus();
+    };
+    input.onpaste = (e) => {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, inputs.length);
+      pasted.split('').forEach((digit, i) => { if (inputs[i]) inputs[i].value = digit; });
+      inputs[Math.min(pasted.length, inputs.length - 1)]?.focus();
+    };
+  });
+}
+
+function getOtpValue(rowId) {
+  return [...document.getElementById(rowId).querySelectorAll('.otp-digit')].map(i => i.value).join('');
+}
+
+async function handleOtpVerify(e) {
+  e.preventDefault();
+  const otp = getOtpValue('otpInputRow');
+  if (otp.length !== 6) { showToast('Please enter the full 6-digit code', 'error'); return false; }
+  const btn = document.getElementById('otpVerifyBtn');
+  setBtnLoading(btn, true, 'Verifying...');
+  try {
+    const result = await Api.verifyOtp({ email: otpContext.email, role: otpContext.role, otp });
+    if (result.token) {
+      Api.setSession(result.token, otpContext.role);
+      invalidateProfileCache();
+    }
+    showToast('Email verified! Welcome to Carto.', 'success');
+    clearInterval(otpResendTimer);
+    navigateTo(otpContext.postLoginRedirect);
+  } catch (err) { showToast(apiErrorMessage(err), 'error'); }
+  finally { setBtnLoading(btn, false); }
+  return false;
+}
+
+async function handleResendOtp(e) {
+  e.preventDefault();
+  const link = document.getElementById('otpResendLink');
+  if (link.classList.contains('disabled')) return false;
+  try {
+    await Api.resendOtp({ email: otpContext.email, role: otpContext.role });
+    showToast('A new code has been sent to your email.', 'success');
+    startOtpResendCountdown();
+  } catch (err) { showToast(apiErrorMessage(err), 'error'); }
+  return false;
+}
+
+function startOtpResendCountdown(seconds = 60) {
+  const link = document.getElementById('otpResendLink');
+  const countdownEl = document.getElementById('otpResendCountdown');
+  let remaining = seconds;
+  link.classList.add('disabled');
+  clearInterval(otpResendTimer);
+  countdownEl.textContent = `(${remaining}s)`;
+  otpResendTimer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      clearInterval(otpResendTimer);
+      link.classList.remove('disabled');
+      countdownEl.textContent = '';
+    } else {
+      countdownEl.textContent = `(${remaining}s)`;
+    }
+  }, 1000);
+}
+
+/* =========================================================
+   FORGOT / RESET PASSWORD
+   ========================================================= */
+let resetContext = { email: null, role: null };
+
+function openForgotPassword(role) {
+  resetContext.role = role;
+  navigateTo('forgotPassword');
+  return false;
+}
+
+async function handleForgotPassword(e) {
+  e.preventDefault();
+  const email = document.getElementById('forgotEmail').value.trim().toLowerCase();
+  const btn = document.getElementById('forgotPasswordBtn');
+  setBtnLoading(btn, true, 'Sending...');
+  try {
+    const result = await Api.forgotPassword({ email, role: resetContext.role || 'user' });
+    resetContext = { email, role: resetContext.role || 'user' };
+    document.getElementById('resetTargetEmail').textContent = email;
+    showToast('If that email is registered, a code has been sent.', 'success');
+    if (result.devOtp) showToast(`Testing mode - your code is: ${result.devOtp}`, 'info', 20000);
+    navigateTo('resetPassword');
+    setTimeout(() => setupOtpInputs('resetOtpInputRow'), 50);
+  } catch (err) { showToast(apiErrorMessage(err), 'error'); }
+  finally { setBtnLoading(btn, false); }
+  return false;
+}
+
+async function handleResetPassword(e) {
+  e.preventDefault();
+  const otp = getOtpValue('resetOtpInputRow');
+  const newPassword = document.getElementById('resetNewPassword').value;
+  if (otp.length !== 6) { showToast('Please enter the full 6-digit code', 'error'); return false; }
+  const btn = document.getElementById('resetPasswordBtn');
+  setBtnLoading(btn, true, 'Resetting...');
+  try {
+    await Api.resetPassword({ email: resetContext.email, role: resetContext.role, otp, newPassword });
+    showToast('Password reset! Please log in with your new password.', 'success');
+    navigateTo(resetContext.role === 'seller' ? 'adminLogin' : 'userLogin');
+  } catch (err) { showToast(apiErrorMessage(err), 'error'); }
+  finally { setBtnLoading(btn, false); }
   return false;
 }
 

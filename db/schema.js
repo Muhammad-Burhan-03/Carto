@@ -14,6 +14,9 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 190 }).notNull(),
   passwordHash: text('password_hash').notNull(),
   phone: varchar('phone', { length: 30 }),
+  isVerified: boolean('is_verified').default(false).notNull(),
+  failedLoginAttempts: integer('failed_login_attempts').default(0).notNull(),
+  lockedUntil: timestamp('locked_until'),
   createdAt: timestamp('created_at').defaultNow().notNull()
 }, (t) => ({
   emailIdx: uniqueIndex('users_email_idx').on(t.email)
@@ -50,6 +53,9 @@ export const sellers = pgTable('sellers', {
   email: varchar('email', { length: 190 }).notNull(),
   passwordHash: text('password_hash').notNull(),
   phone: varchar('phone', { length: 30 }),
+  isVerified: boolean('is_verified').default(false).notNull(),
+  failedLoginAttempts: integer('failed_login_attempts').default(0).notNull(),
+  lockedUntil: timestamp('locked_until'),
   packageId: varchar('package_id', { length: 40 }).references(() => packages.id),
   packageActive: boolean('package_active').default(false),
   packagePurchasedAt: timestamp('package_purchased_at'),
@@ -59,6 +65,36 @@ export const sellers = pgTable('sellers', {
   createdAt: timestamp('created_at').defaultNow().notNull()
 }, (t) => ({
   emailIdx: uniqueIndex('sellers_email_idx').on(t.email)
+}));
+
+/* ---------------- EMAIL VERIFICATIONS (OTP) ---------------- */
+export const emailVerifications = pgTable('email_verifications', {
+  id: serial('id').primaryKey(),
+  accountType: varchar('account_type', { length: 10 }).notNull(), // 'user' | 'seller'
+  accountId: integer('account_id').notNull(),
+  otpHash: text('otp_hash').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  attemptCount: integer('attempt_count').default(0).notNull(),
+  resendCount: integer('resend_count').default(0).notNull(),
+  lastSentAt: timestamp('last_sent_at').defaultNow().notNull(),
+  verifiedAt: timestamp('verified_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+}, (t) => ({
+  accountIdx: index('email_verifications_account_idx').on(t.accountType, t.accountId)
+}));
+
+/* ---------------- PASSWORD RESET TOKENS ---------------- */
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: serial('id').primaryKey(),
+  accountType: varchar('account_type', { length: 10 }).notNull(), // 'user' | 'seller'
+  accountId: integer('account_id').notNull(),
+  otpHash: text('otp_hash').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  attemptCount: integer('attempt_count').default(0).notNull(),
+  used: boolean('used').default(false).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull()
+}, (t) => ({
+  accountIdx: index('password_reset_tokens_account_idx').on(t.accountType, t.accountId)
 }));
 
 /* ---------------- CATEGORIES ---------------- */

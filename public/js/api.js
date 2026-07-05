@@ -34,6 +34,7 @@ const Api = {
       res = await fetch(`${API_BASE}${path}`, {
         method,
         headers,
+        credentials: 'include',
         body: body !== undefined ? JSON.stringify(body) : undefined
       });
     } catch (networkErr) {
@@ -65,6 +66,10 @@ const Api = {
   registerSeller(payload) { return this.post('/sellers/register', payload); },
   loginSeller(payload) { return this.post('/sellers/login', payload); },
   logout() { return this.post('/auth/logout'); },
+  verifyOtp(payload) { return this.post('/auth/verify-otp', payload); },
+  resendOtp(payload) { return this.post('/auth/resend-otp', payload); },
+  forgotPassword(payload) { return this.post('/auth/forgot-password', payload); },
+  resetPassword(payload) { return this.post('/auth/reset-password', payload); },
   me() { return this.get('/auth/me'); },
   updateProfile(payload) { return this.put('/auth/me', payload); },
   sellerPublicProfile(id) { return this.get(`/sellers/${id}`); },

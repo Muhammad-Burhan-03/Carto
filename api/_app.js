@@ -7,20 +7,57 @@
    ========================================================= */
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import { eq, and, desc, asc, sql as rawSql, ilike, gte, lte, or } from 'drizzle-orm';
 
 import { db } from '../db/index.js';
 import {
   users, sellers, packages, categories, brands, products, productImages,
   carts, cartItems, wishlists, wishlistItems, addresses, orders, orderItems,
-  payments, reviews, contactMessages, newsletterSubscribers, notifications
+  payments, reviews, contactMessages, newsletterSubscribers, notifications,
+  emailVerifications, passwordResetTokens
 } from '../db/schema.js';
-import { hashPassword, verifyPassword, signToken, requireAuth, requireRole, optionalAuth } from '../lib/auth.js';
+import {
+  hashPassword, verifyPassword, signToken, requireAuth, requireRole, optionalAuth,
+  setAuthCookie, clearAuthCookie
+} from '../lib/auth.js';
 import { validate } from '../lib/validation.js';
+import {
+  generateOtp, hashOtp, verifyOtpHash, otpExpiryDate, isExpired, secondsSince,
+  RESEND_COOLDOWN_SECONDS, MAX_VERIFY_ATTEMPTS, MAX_RESEND_ATTEMPTS
+} from '../lib/otp.js';
+import { sendOtpEmail } from '../lib/email.js';
 
 const app = express();
-app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*' }));
+app.set('trust proxy', 1); // required for express-rate-limit to read X-Forwarded-For correctly behind Vercel's proxy
+app.use(cors({ origin: process.env.ALLOWED_ORIGIN || '*', credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
+
+// Defense-in-depth security headers (in addition to vercel.json's headers,
+// which don't cover a CSP since that needs to match this app's own asset
+// origins - kept here so it travels with the app regardless of host).
+app.use((req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'"
+  );
+  next();
+});
+
+// Rate limiting for sensitive auth endpoints. Note: Vercel serverless
+// functions are stateless between invocations, so this in-memory limiter
+// is a best-effort defense (resets on cold start) rather than a hard
+// guarantee - the real brute-force protection for OTP/login comes from
+// the DB-backed attempt counters and account lockout logic below.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' }
+});
 
 const router = express.Router();
 
@@ -31,35 +68,109 @@ const h = (fn) => (req, res) => fn(req, res).catch((err) => {
 });
 
 /* =========================================================
+   OTP / VERIFICATION HELPERS
+   ========================================================= */
+function tableForRole(role) {
+  return role === 'seller' ? sellers : users;
+}
+
+async function findAccountByEmail(role, email) {
+  const table = tableForRole(role);
+  const [account] = await db.select().from(table).where(eq(table.email, email));
+  return account;
+}
+
+async function createAndSendOtp(accountType, accountId, email, purpose) {
+  const otp = generateOtp();
+  const otpHash = await hashOtp(otp);
+  const table = purpose === 'reset' ? passwordResetTokens : emailVerifications;
+
+  const values = purpose === 'reset'
+    ? { accountType, accountId, otpHash, expiresAt: otpExpiryDate() }
+    : { accountType, accountId, otpHash, expiresAt: otpExpiryDate(), lastSentAt: new Date() };
+
+  await db.insert(table).values(values);
+
+  let emailSent = true;
+  try {
+    const result = await sendOtpEmail(email, otp, { purpose });
+    if (result?.skipped) emailSent = false;
+  } catch (err) {
+    // Don't fail the whole request if the email provider hiccups - the
+    // user can still use "resend" once RESEND_API_KEY / provider recovers.
+    console.error('Failed to send OTP email:', err.message);
+    emailSent = false;
+  }
+
+  // If no email provider is configured yet, surface the OTP directly in
+  // the API response so the flow is still testable end-to-end. This only
+  // ever triggers when RESEND_API_KEY is unset - never in a real send.
+  return { emailSent, devOtp: emailSent ? undefined : otp };
+}
+
+/* =========================================================
    AUTH: USERS
    ========================================================= */
-router.post('/auth/register', validate('registerUser'), h(async (req, res) => {
+router.post('/auth/register', authLimiter, validate('registerUser'), h(async (req, res) => {
   const { name, email, password, phone } = req.validated;
   const existing = await db.select().from(users).where(eq(users.email, email));
   if (existing.length) return res.status(409).json({ error: 'Email already registered' });
 
   const passwordHash = await hashPassword(password);
-  const [user] = await db.insert(users).values({ name, email, passwordHash, phone }).returning();
+  const [user] = await db.insert(users).values({ name, email, passwordHash, phone, isVerified: false }).returning();
   const [cart] = await db.insert(carts).values({ userId: user.id }).returning();
   await db.insert(wishlists).values({ userId: user.id });
 
-  const token = signToken({ id: user.id, role: 'user' });
-  res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone } });
+  const { devOtp } = await createAndSendOtp('user', user.id, user.email, 'verify');
+
+  res.status(201).json({
+    requiresVerification: true,
+    email: user.email,
+    role: 'user',
+    message: 'Account created. Check your email for a 6-digit verification code.',
+    ...(devOtp ? { devOtp, devNote: 'RESEND_API_KEY not configured - showing OTP directly for testing.' } : {})
+  });
 }));
 
-router.post('/auth/login', validate('login'), h(async (req, res) => {
-  const { email, password } = req.validated;
+router.post('/auth/login', authLimiter, validate('login'), h(async (req, res) => {
+  const { email, password, rememberMe } = req.validated;
   const [user] = await db.select().from(users).where(eq(users.email, email));
   if (!user) return res.status(401).json({ error: 'Invalid email or password' });
-  const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) return res.status(401).json({ error: 'Invalid email or password' });
 
-  const token = signToken({ id: user.id, role: 'user' });
+  if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+    const minutesLeft = Math.ceil((new Date(user.lockedUntil) - new Date()) / 60000);
+    return res.status(423).json({ error: `Account temporarily locked. Try again in ${minutesLeft} minute(s).` });
+  }
+
+  const ok = await verifyPassword(password, user.passwordHash);
+  if (!ok) {
+    const attempts = (user.failedLoginAttempts || 0) + 1;
+    const lockedUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
+    await db.update(users).set({ failedLoginAttempts: attempts, lockedUntil }).where(eq(users.id, user.id));
+    if (lockedUntil) return res.status(423).json({ error: 'Too many failed attempts. Account locked for 15 minutes.' });
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+
+  if (!user.isVerified) {
+    return res.status(403).json({
+      error: 'Email not verified. Please verify your email to continue.',
+      requiresVerification: true,
+      email: user.email,
+      role: 'user'
+    });
+  }
+
+  await db.update(users).set({ failedLoginAttempts: 0, lockedUntil: null }).where(eq(users.id, user.id));
+
+  const token = signToken({ id: user.id, role: 'user' }, { rememberMe: !!rememberMe });
+  setAuthCookie(res, token, { rememberMe: !!rememberMe });
   res.json({ token, user: { id: user.id, name: user.name, email: user.email, phone: user.phone } });
 }));
 
 router.post('/auth/logout', (req, res) => {
-  // Stateless JWT: logout is handled client-side by discarding the token.
+  // Stateless JWT: logout is handled client-side by discarding the token;
+  // we also clear the httpOnly cookie copy if one was set.
+  clearAuthCookie(res);
   res.json({ success: true });
 });
 
@@ -84,33 +195,178 @@ router.put('/auth/me', requireAuth, validate('updateProfile'), h(async (req, res
 }));
 
 /* =========================================================
+   AUTH: EMAIL VERIFICATION (shared for users + sellers)
+   ========================================================= */
+router.post('/auth/verify-otp', authLimiter, validate('verifyOtp'), h(async (req, res) => {
+  const { email, role, otp } = req.validated;
+  const account = await findAccountByEmail(role, email);
+  if (!account) return res.status(404).json({ error: 'Account not found' });
+  if (account.isVerified) return res.status(200).json({ success: true, alreadyVerified: true });
+
+  const [record] = await db.select().from(emailVerifications)
+    .where(and(eq(emailVerifications.accountType, role), eq(emailVerifications.accountId, account.id)))
+    .orderBy(desc(emailVerifications.createdAt)).limit(1);
+
+  if (!record) return res.status(400).json({ error: 'No verification code found. Please request a new one.' });
+  if (record.verifiedAt) return res.status(200).json({ success: true, alreadyVerified: true });
+  if (isExpired(record.expiresAt)) return res.status(400).json({ error: 'Code expired. Please request a new one.' });
+  if (record.attemptCount >= MAX_VERIFY_ATTEMPTS) {
+    return res.status(429).json({ error: 'Too many incorrect attempts. Please request a new code.' });
+  }
+
+  const match = await verifyOtpHash(otp, record.otpHash);
+  if (!match) {
+    await db.update(emailVerifications).set({ attemptCount: record.attemptCount + 1 }).where(eq(emailVerifications.id, record.id));
+    return res.status(400).json({ error: 'Incorrect code. Please try again.' });
+  }
+
+  await db.update(emailVerifications).set({ verifiedAt: new Date() }).where(eq(emailVerifications.id, record.id));
+  const table = tableForRole(role);
+  await db.update(table).set({ isVerified: true }).where(eq(table.id, account.id));
+
+  const token = signToken({ id: account.id, role });
+  setAuthCookie(res, token, { rememberMe: false });
+  const { passwordHash, ...safe } = account;
+  res.json({ success: true, token, [role]: { ...safe, isVerified: true } });
+}));
+
+router.post('/auth/resend-otp', authLimiter, validate('resendOtp'), h(async (req, res) => {
+  const { email, role } = req.validated;
+  const account = await findAccountByEmail(role, email);
+  // Don't reveal whether the account exists - respond success either way.
+  if (!account || account.isVerified) return res.json({ success: true });
+
+  const [lastRecord] = await db.select().from(emailVerifications)
+    .where(and(eq(emailVerifications.accountType, role), eq(emailVerifications.accountId, account.id)))
+    .orderBy(desc(emailVerifications.createdAt)).limit(1);
+
+  if (lastRecord) {
+    const elapsed = secondsSince(lastRecord.lastSentAt);
+    if (elapsed < RESEND_COOLDOWN_SECONDS) {
+      return res.status(429).json({ error: `Please wait ${Math.ceil(RESEND_COOLDOWN_SECONDS - elapsed)}s before requesting another code.` });
+    }
+    if (lastRecord.resendCount >= MAX_RESEND_ATTEMPTS) {
+      return res.status(429).json({ error: 'Resend limit reached. Please try again later or contact support.' });
+    }
+    await db.update(emailVerifications).set({ resendCount: lastRecord.resendCount + 1 }).where(eq(emailVerifications.id, lastRecord.id));
+  }
+
+  const { devOtp } = await createAndSendOtp(role, account.id, account.email, 'verify');
+  res.json({ success: true, ...(devOtp ? { devOtp, devNote: 'RESEND_API_KEY not configured - showing OTP directly for testing.' } : {}) });
+}));
+
+/* =========================================================
+   AUTH: FORGOT / RESET PASSWORD (shared for users + sellers)
+   ========================================================= */
+router.post('/auth/forgot-password', authLimiter, validate('forgotPassword'), h(async (req, res) => {
+  const { email, role } = req.validated;
+  const account = await findAccountByEmail(role, email);
+  // Always respond success - don't leak which emails are registered.
+  let devOtp;
+  if (account) {
+    // Invalidate any unused prior reset codes before issuing a fresh one.
+    await db.delete(passwordResetTokens).where(and(
+      eq(passwordResetTokens.accountType, role),
+      eq(passwordResetTokens.accountId, account.id),
+      eq(passwordResetTokens.used, false)
+    ));
+    const result = await createAndSendOtp(role, account.id, account.email, 'reset');
+    devOtp = result.devOtp;
+  }
+  res.json({
+    success: true,
+    message: 'If that email is registered, a reset code has been sent.',
+    ...(devOtp ? { devOtp, devNote: 'RESEND_API_KEY not configured - showing OTP directly for testing.' } : {})
+  });
+}));
+
+router.post('/auth/reset-password', authLimiter, validate('resetPassword'), h(async (req, res) => {
+  const { email, role, otp, newPassword } = req.validated;
+  const account = await findAccountByEmail(role, email);
+  if (!account) return res.status(400).json({ error: 'Invalid code or email.' });
+
+  const [record] = await db.select().from(passwordResetTokens)
+    .where(and(eq(passwordResetTokens.accountType, role), eq(passwordResetTokens.accountId, account.id), eq(passwordResetTokens.used, false)))
+    .orderBy(desc(passwordResetTokens.createdAt)).limit(1);
+
+  if (!record) return res.status(400).json({ error: 'Invalid or expired code. Please request a new one.' });
+  if (isExpired(record.expiresAt)) return res.status(400).json({ error: 'Code expired. Please request a new one.' });
+  if (record.attemptCount >= MAX_VERIFY_ATTEMPTS) {
+    return res.status(429).json({ error: 'Too many incorrect attempts. Please request a new code.' });
+  }
+
+  const match = await verifyOtpHash(otp, record.otpHash);
+  if (!match) {
+    await db.update(passwordResetTokens).set({ attemptCount: record.attemptCount + 1 }).where(eq(passwordResetTokens.id, record.id));
+    return res.status(400).json({ error: 'Incorrect code. Please try again.' });
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  const table = tableForRole(role);
+  await db.update(table).set({ passwordHash, failedLoginAttempts: 0, lockedUntil: null }).where(eq(table.id, account.id));
+  await db.update(passwordResetTokens).set({ used: true }).where(eq(passwordResetTokens.id, record.id));
+
+  res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
+}));
+
+/* =========================================================
    AUTH: SELLERS (ADMIN / MARKETPLACE SELLERS)
    ========================================================= */
-router.post('/sellers/register', validate('registerSeller'), h(async (req, res) => {
+router.post('/sellers/register', authLimiter, validate('registerSeller'), h(async (req, res) => {
   const { name, email, password, phone, packageId, storeName, storeDescription, storeLogo } = req.validated;
   const existing = await db.select().from(sellers).where(eq(sellers.email, email));
   if (existing.length) return res.status(409).json({ error: 'Email already registered' });
 
   const passwordHash = await hashPassword(password);
   const [seller] = await db.insert(sellers).values({
-    name, email, passwordHash, phone, packageId,
+    name, email, passwordHash, phone, packageId, isVerified: false,
     packageActive: true, packagePurchasedAt: new Date(),
     storeName, storeDescription, storeLogo
   }).returning();
 
-  const token = signToken({ id: seller.id, role: 'seller' });
-  const { passwordHash: _, ...safe } = seller;
-  res.status(201).json({ token, seller: safe });
+  const { devOtp } = await createAndSendOtp('seller', seller.id, seller.email, 'verify');
+
+  res.status(201).json({
+    requiresVerification: true,
+    email: seller.email,
+    role: 'seller',
+    message: 'Account created. Check your email for a 6-digit verification code.',
+    ...(devOtp ? { devOtp, devNote: 'RESEND_API_KEY not configured - showing OTP directly for testing.' } : {})
+  });
 }));
 
-router.post('/sellers/login', validate('login'), h(async (req, res) => {
-  const { email, password } = req.validated;
+router.post('/sellers/login', authLimiter, validate('login'), h(async (req, res) => {
+  const { email, password, rememberMe } = req.validated;
   const [seller] = await db.select().from(sellers).where(eq(sellers.email, email));
   if (!seller) return res.status(401).json({ error: 'Invalid email or password' });
-  const ok = await verifyPassword(password, seller.passwordHash);
-  if (!ok) return res.status(401).json({ error: 'Invalid email or password' });
 
-  const token = signToken({ id: seller.id, role: 'seller' });
+  if (seller.lockedUntil && new Date(seller.lockedUntil) > new Date()) {
+    const minutesLeft = Math.ceil((new Date(seller.lockedUntil) - new Date()) / 60000);
+    return res.status(423).json({ error: `Account temporarily locked. Try again in ${minutesLeft} minute(s).` });
+  }
+
+  const ok = await verifyPassword(password, seller.passwordHash);
+  if (!ok) {
+    const attempts = (seller.failedLoginAttempts || 0) + 1;
+    const lockedUntil = attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
+    await db.update(sellers).set({ failedLoginAttempts: attempts, lockedUntil }).where(eq(sellers.id, seller.id));
+    if (lockedUntil) return res.status(423).json({ error: 'Too many failed attempts. Account locked for 15 minutes.' });
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+
+  if (!seller.isVerified) {
+    return res.status(403).json({
+      error: 'Email not verified. Please verify your email to continue.',
+      requiresVerification: true,
+      email: seller.email,
+      role: 'seller'
+    });
+  }
+
+  await db.update(sellers).set({ failedLoginAttempts: 0, lockedUntil: null }).where(eq(sellers.id, seller.id));
+
+  const token = signToken({ id: seller.id, role: 'seller' }, { rememberMe: !!rememberMe });
+  setAuthCookie(res, token, { rememberMe: !!rememberMe });
   const { passwordHash, ...safe } = seller;
   res.json({ token, seller: safe });
 }));
