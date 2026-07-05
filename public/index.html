@@ -240,6 +240,7 @@
       <div class="auth-form-box">
         <h3>Enter Verification Code</h3>
         <p class="otp-target-email" id="otpTargetEmail"></p>
+        <div id="otpDevHint" class="dev-otp-hint" style="display:none"></div>
         <form id="otpVerifyForm" onsubmit="return handleOtpVerify(event)">
           <div class="otp-input-row" id="otpInputRow">
             <input type="text" inputmode="numeric" maxlength="1" class="otp-digit" data-idx="0">
@@ -291,6 +292,7 @@
       <div class="auth-form-box">
         <h3>Set New Password</h3>
         <p class="otp-target-email" id="resetTargetEmail"></p>
+        <div id="resetDevHint" class="dev-otp-hint" style="display:none"></div>
         <form id="resetPasswordForm" onsubmit="return handleResetPassword(event)">
           <div class="otp-input-row" id="resetOtpInputRow">
             <input type="text" inputmode="numeric" maxlength="1" class="otp-digit reset-otp-digit" data-idx="0">

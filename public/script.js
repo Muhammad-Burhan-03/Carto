@@ -206,8 +206,7 @@ async function handleUserRegister(e) {
   try {
     const result = await Api.registerUser({ name, email, phone, password });
     showToast(result.message || 'Account created! Check your email for a code.', 'success');
-    if (result.devOtp) showToast(`Testing mode - your code is: ${result.devOtp}`, 'info', 20000);
-    openOtpVerify(result.email, result.role);
+    openOtpVerify(result.email, result.role, undefined, result.devOtp);
   } catch (err) { showToast(apiErrorMessage(err), 'error'); }
   finally { setBtnLoading(btn, false); }
   return false;
@@ -253,8 +252,7 @@ async function handleAdminRegister(e) {
       name, email, phone, password, packageId: 'basic', storeName: `${name}'s Store`
     });
     showToast(result.message || 'Account created! Check your email for a code.', 'success');
-    if (result.devOtp) showToast(`Testing mode - your code is: ${result.devOtp}`, 'info', 20000);
-    openOtpVerify(result.email, result.role);
+    openOtpVerify(result.email, result.role, undefined, result.devOtp);
   } catch (err) { showToast(apiErrorMessage(err), 'error'); }
   finally { setBtnLoading(btn, false); }
   return false;
@@ -281,11 +279,26 @@ function setBtnLoading(btn, loading, loadingText) {
 let otpContext = { email: null, role: null, postLoginRedirect: 'home' };
 let otpResendTimer = null;
 
-function openOtpVerify(email, role, postLoginRedirect) {
+function openOtpVerify(email, role, postLoginRedirect, devOtp) {
   otpContext = { email, role, postLoginRedirect: postLoginRedirect || (role === 'seller' ? 'packages' : 'home') };
   document.getElementById('otpTargetEmail').textContent = email;
+
+  const hint = document.getElementById('otpDevHint');
+  if (devOtp) {
+    hint.innerHTML = `Email service not configured yet - here's your code for testing:<strong>${devOtp}</strong>`;
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
+  }
+
   navigateTo('otpVerify');
-  setTimeout(() => setupOtpInputs('otpInputRow'), 50);
+  setTimeout(() => {
+    setupOtpInputs('otpInputRow');
+    if (devOtp) {
+      const inputs = [...document.getElementById('otpInputRow').querySelectorAll('.otp-digit')];
+      devOtp.split('').forEach((digit, i) => { if (inputs[i]) inputs[i].value = digit; });
+    }
+  }, 50);
   startOtpResendCountdown();
 }
 
@@ -341,8 +354,15 @@ async function handleResendOtp(e) {
   const link = document.getElementById('otpResendLink');
   if (link.classList.contains('disabled')) return false;
   try {
-    await Api.resendOtp({ email: otpContext.email, role: otpContext.role });
+    const result = await Api.resendOtp({ email: otpContext.email, role: otpContext.role });
     showToast('A new code has been sent to your email.', 'success');
+    const hint = document.getElementById('otpDevHint');
+    if (result.devOtp) {
+      hint.innerHTML = `Email service not configured yet - here's your code for testing:<strong>${result.devOtp}</strong>`;
+      hint.style.display = 'block';
+      const inputs = [...document.getElementById('otpInputRow').querySelectorAll('.otp-digit')];
+      result.devOtp.split('').forEach((digit, i) => { if (inputs[i]) inputs[i].value = digit; });
+    }
     startOtpResendCountdown();
   } catch (err) { showToast(apiErrorMessage(err), 'error'); }
   return false;
@@ -388,9 +408,19 @@ async function handleForgotPassword(e) {
     resetContext = { email, role: resetContext.role || 'user' };
     document.getElementById('resetTargetEmail').textContent = email;
     showToast('If that email is registered, a code has been sent.', 'success');
-    if (result.devOtp) showToast(`Testing mode - your code is: ${result.devOtp}`, 'info', 20000);
     navigateTo('resetPassword');
-    setTimeout(() => setupOtpInputs('resetOtpInputRow'), 50);
+    setTimeout(() => {
+      setupOtpInputs('resetOtpInputRow');
+      const hint = document.getElementById('resetDevHint');
+      if (result.devOtp) {
+        hint.innerHTML = `Email service not configured yet - here's your code for testing:<strong>${result.devOtp}</strong>`;
+        hint.style.display = 'block';
+        const inputs = [...document.getElementById('resetOtpInputRow').querySelectorAll('.otp-digit')];
+        result.devOtp.split('').forEach((digit, i) => { if (inputs[i]) inputs[i].value = digit; });
+      } else {
+        hint.style.display = 'none';
+      }
+    }, 50);
   } catch (err) { showToast(apiErrorMessage(err), 'error'); }
   finally { setBtnLoading(btn, false); }
   return false;
