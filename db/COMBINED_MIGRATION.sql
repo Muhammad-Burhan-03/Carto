@@ -223,7 +223,7 @@ ON CONFLICT (slug) DO NOTHING;
 INSERT INTO sellers (id, name, email, password_hash, phone, package_id, package_active, package_purchased_at, store_name, store_description, store_logo)
 VALUES (
   1, 'Demo Seller', 'admin@demo.com',
-  '$2a$10$CwTycUXWue0Thq9StjUM0uJ8Ke8y1u.eXAMPLEHASHREPLACEME01',
+  '$2a$10$9eGL5PrKYfA1JB9gfXFN4e1DNKWkEYZncggCQK4SCme5BTQpyyQVK',
   '+92 300 1112223', 'standard', true, now(),
   'TechNest Store', 'Your one-stop shop for the latest electronics, gadgets and accessories at unbeatable prices.',
   'https://placehold.co/120x120/6C5CE7/fff?text=TN'
@@ -234,7 +234,7 @@ SELECT setval('sellers_id_seq', GREATEST((SELECT MAX(id) FROM sellers), 1));
 INSERT INTO users (id, name, email, password_hash, phone)
 VALUES (
   1, 'Demo User', 'user@demo.com',
-  '$2a$10$CwTycUXWue0Thq9StjUM0uJ8Ke8y1u.eXAMPLEHASHREPLACEME02',
+  '$2a$10$9eGL5PrKYfA1JB9gfXFN4e1DNKWkEYZncggCQK4SCme5BTQpyyQVK',
   '+92 300 5556667'
 ) ON CONFLICT (id) DO NOTHING;
 SELECT setval('users_id_seq', GREATEST((SELECT MAX(id) FROM users), 1));
@@ -243,8 +243,7 @@ INSERT INTO addresses (user_id, label, full_address, city, phone, is_default)
 SELECT 1, 'Home', 'House 12, Street 5, Gulberg', 'Lahore', '+92 300 5556667', true
 WHERE NOT EXISTS (SELECT 1 FROM addresses WHERE user_id = 1);
 
--- NOTE: The bcrypt hashes above are placeholders. Run `node db/hash-demo-passwords.js`
--- after migrating to set real bcrypt hashes for the demo accounts (both use "123456").
+-- Demo accounts (admin@demo.com and user@demo.com) both use password "123456".
 -- Demo product catalog, linked to demo seller (id 1) and categories by slug.
 -- Safe to re-run: only inserts if the products table is empty.
 
