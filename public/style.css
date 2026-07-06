@@ -564,8 +564,16 @@ img{max-width:100%;display:block;}
     gap:10px;
   }
 
-  .nav-link{
+  .nav-link:not(.nav-account):not(.nav-cart){
     display:none;
+  }
+
+  .nav-account{
+    order:2;
+  }
+
+  .nav-cart{
+    order:3;
   }
 
   .hamburger{
