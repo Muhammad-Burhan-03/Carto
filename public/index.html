@@ -18,7 +18,15 @@
 <nav class="navbar" id="mainNavbar">
   <div class="nav-container">
     <div class="nav-left">
-      <button class="hamburger" id="hamburgerBtn">☰</button>
+      <div class="mobile-menu-wrap" id="mobileMenuWrap">
+        <button class="hamburger" id="hamburgerBtn">☰</button>
+        <div class="mobile-menu-dropdown" id="mobileMenuDropdown">
+          <a onclick="navigateTo('home')">🏠 Home</a>
+          <a onclick="navigateTo('products')">🛍️ Shop</a>
+          <div class="mobile-menu-divider"></div>
+          <div id="mobileMenuAuthLinks"></div>
+        </div>
+      </div>
       <a href="#" class="logo" onclick="navigateTo('home')">
         <img src="carto_logo_primary.png" alt="logo" style="width: 200px;">
       </a>

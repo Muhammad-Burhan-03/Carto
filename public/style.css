@@ -105,6 +105,17 @@ img{max-width:100%;display:block;}
   width:18px;height:18px;display:flex;align-items:center;justify-content:center;margin-left:2px;
 }
 .nav-account{position:relative;cursor:pointer;}
+.mobile-menu-wrap{position:relative;}
+.mobile-menu-dropdown{
+  display:none;position:absolute;left:0;top:40px;background:#fff;border-radius:10px;box-shadow:var(--shadow-lg);
+  min-width:160px;padding:8px;z-index:1001;
+}
+.mobile-menu-dropdown.open{display:block;}
+.mobile-menu-dropdown a{
+  display:block;padding:10px 14px;border-radius:8px;font-size:14px;cursor:pointer;color:var(--text);font-weight:500;
+}
+.mobile-menu-dropdown a:hover{background:var(--bg);}
+.mobile-menu-divider{height:1px;background:var(--border);margin:6px 4px;}
 .account-dropdown{
   display:none;position:absolute;right:0;top:36px;background:#fff;border-radius:10px;box-shadow:var(--shadow-lg);
   min-width:200px;padding:8px;z-index:100;

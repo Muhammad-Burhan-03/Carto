@@ -60,6 +60,7 @@ async function navigateTo(view, opts = {}) {
   currentView = view;
   window.scrollTo({ top: 0, behavior: 'smooth' });
   closeAccountDropdown();
+  closeMobileMenu();
 
   const session = getSession();
   if (view === 'adminDashboard' && !session) { navigateTo('adminLogin'); return; }
@@ -88,6 +89,7 @@ async function updateNavbar() {
   const session = getSession();
   const label = document.getElementById('navAccountLabel');
   const dropdown = document.getElementById('accountDropdown');
+  const mobileAuthLinks = document.getElementById('mobileMenuAuthLinks');
 
   try {
     if (session && session.role === 'user') {
@@ -98,9 +100,10 @@ async function updateNavbar() {
     }
   } catch { document.getElementById('cartBadge').textContent = 0; }
 
+  let dropdownHTML;
   if (!session) {
     label.textContent = '👤 Login';
-    dropdown.innerHTML = `
+    dropdownHTML = `
       <a onclick="navigateTo('userLogin')">User Login</a>
       <a onclick="navigateTo('userRegister')">User Register</a>
       <a onclick="navigateTo('adminLogin')">Seller Login</a>
@@ -108,7 +111,7 @@ async function updateNavbar() {
   } else if (session.role === 'user') {
     const u = await getCurrentUser();
     label.textContent = `👤 ${u ? u.name.split(' ')[0] : 'Account'}`;
-    dropdown.innerHTML = `
+    dropdownHTML = `
       <a onclick="navigateTo('userDashboard')">My Dashboard</a>
       <a onclick="navigateTo('orderHistory')">Order History</a>
       <a onclick="logout()">Logout</a>
@@ -116,14 +119,17 @@ async function updateNavbar() {
   } else if (session.role === 'seller') {
     const a = await getCurrentAdmin();
     label.textContent = `🏪 ${a ? a.name.split(' ')[0] : 'Seller'}`;
-    dropdown.innerHTML = `
+    dropdownHTML = `
       <a onclick="navigateTo('adminDashboard')">Seller Dashboard</a>
       <a onclick="logout()">Logout</a>
     `;
   }
+  dropdown.innerHTML = dropdownHTML;
+  if (mobileAuthLinks) mobileAuthLinks.innerHTML = dropdownHTML;
 }
 
 function closeAccountDropdown() { document.getElementById('accountDropdown').classList.remove('open'); }
+function closeMobileMenu() { document.getElementById('mobileMenuDropdown').classList.remove('open'); }
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('navAccountBtn').addEventListener('click', (e) => {
@@ -132,10 +138,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.addEventListener('click', closeAccountDropdown);
 
-  document.getElementById('hamburgerBtn').addEventListener('click', () => {
-    document.querySelector('.nav-search').style.display =
-      document.querySelector('.nav-search').style.display === 'flex' ? 'none' : 'flex';
+  document.getElementById('hamburgerBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('mobileMenuDropdown').classList.toggle('open');
   });
+  document.addEventListener('click', closeMobileMenu);
 
   document.addEventListener('change', (e) => {
     if (e.target.name === 'payment') {
