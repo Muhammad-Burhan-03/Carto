@@ -14,13 +14,14 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
-    "drizzle-orm": "^0.36.4",
     "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "express": "^4.21.1",
-    "cors": "^2.8.5",
     "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "drizzle-orm": "^0.36.4",
+    "express": "^4.21.1",
     "express-rate-limit": "^7.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^9.0.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
